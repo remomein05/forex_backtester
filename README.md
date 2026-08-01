@@ -8,16 +8,23 @@ Describe trading strategies in plain English, visualize logic with interactive M
 
 ## ✨ Features
 
-- **Dukascopy Tick Downloader & Aggregator**: Custom Python downloader for Dukascopy LZMA-compressed `.bi5` tick data files, parsing 20-byte tick structs and aggregating them into 1m, 5m, 15m, 1h, and 1d OHLCV candle datasets.
+- **Dukascopy Tick Downloader & Aggregator**: Async `httpx`-based downloader for Dukascopy LZMA-compressed `.bi5` tick data files. Parses 20-byte tick structs using **vectorized NumPy**, aggregates into 1m, 5m, 15m, 1h, and 1d OHLCV candle datasets, and caches results to CSV.
+  - Up to **6 days downloaded in parallel** (via `asyncio.Semaphore`)
+  - Up to **8 hourly files fetched concurrently per day** to respect Dukascopy rate limits
+  - **Automatic 429 retry** with exponential backoff (up to 4 attempts, 1s → 2s → 4s + jitter)
+  - Smart weekend filtering: Saturday skipped, Sunday limited to hours 21–23
 - **AI Strategy Translator (Gemini LLM)**: Translates natural language trading rules into:
   - **Mermaid.js Flowcharts**: Visual decision trees mapping entry, exit, indicator filters, and risk management rules.
   - **`backtesting.py` Python Classes**: Syntactically valid Python code inheriting from `backtesting.Strategy` with built-in indicator calculations (SMA, EMA, RSI, ATR, Bollinger Bands).
 - **Interactive Logic Verification**: Built-in verification gate in the UI requiring user approval of the flowchart before Python code compilation.
+- **Multi-Timeframe (MTF) Backtesting**: Optionally supply a higher timeframe (e.g., 1h primary + 1d HTF). HTF OHLCV columns (`Open_htf`, `High_htf`, `Low_htf`, `Close_htf`) are merged into the primary DataFrame via `merge_asof` for trend-filter strategies.
 - **Backtest Execution Engine**: Dynamically loads and runs generated Python strategies on historical candle data with customizable starting equity and commission rates.
 - **Performance Analytics Dashboard**:
   - Metric cards: Ending Balance, Net Return %, Win Rate %, Max Drawdown %, Sharpe Ratio, Profit Factor, Total Trades.
   - Interactive Recharts visualizer toggleable between Equity Curve and Drawdown.
   - Detailed trade log table with entry/exit timestamps, price levels, trade duration, return %, PnL, and pagination/filtering.
+  - **CSV export** of the full trade log with one click.
+- **Live Download Progress Streaming**: Server-Sent Events (SSE) stream real-time per-day progress, candle counts, cache-hit status, and ETA to the frontend.
 
 ---
 
@@ -32,9 +39,9 @@ graph TD
     UI -->|5. Confirm & Request Code| BE
     BE -->|6. Generate Strategy Code| Gemini
     BE -->|7. Run Backtest| BT[backtesting.py & Pandas]
-    BE -->|Download bi5| Duka[Dukascopy Servers]
-    Duka -->|Tick Data| Parser[Tick Parser & Aggregator]
-    Parser -->|Candle CSV| BT
+    BE -->|Async httpx| Duka[Dukascopy Servers]
+    Duka -->|LZMA .bi5 Tick Data| Parser[NumPy Tick Parser & Aggregator]
+    Parser -->|1m Candle CSV Cache| BT
 ```
 
 ---
@@ -45,7 +52,8 @@ graph TD
 - **Framework**: Python 3.10+, FastAPI, Uvicorn
 - **Backtesting Engine**: `backtesting.py`, Pandas, NumPy
 - **LLM Integration**: Official `google-genai` SDK (`gemini-2.5-flash` / `gemini-2.5-pro`)
-- **Data Parser**: Python built-in `lzma` & `struct` modules for Dukascopy `.bi5` binary files
+- **Data Downloader**: `httpx` (async) with connection pooling, `asyncio` concurrency control, exponential backoff retry
+- **Data Parser**: `lzma` (decompression) + NumPy `frombuffer` for vectorized 20-byte tick struct parsing
 
 ### Frontend
 - **Framework**: React 18, Vite, TypeScript
@@ -61,8 +69,8 @@ graph TD
 forex_strategy_backtester/
 │
 ├── backend/
-│   ├── main.py                  # FastAPI server & endpoints
-│   ├── downloader.py            # Dukascopy tick downloader & 1m candle aggregator
+│   ├── main.py                  # FastAPI server & endpoints (SSE download progress)
+│   ├── downloader.py            # Async httpx tick downloader, NumPy parser & 1m candle aggregator
 │   ├── llm_manager.py           # Gemini API client & system prompts
 │   ├── backtest_runner.py       # Dynamic Python strategy executor
 │   ├── test_verification.py     # Automated test suite
@@ -83,7 +91,7 @@ forex_strategy_backtester/
 │   │       ├── StrategyEditor.tsx # Text prompt input & code viewer
 │   │       ├── FlowchartViewer.tsx # Mermaid flowchart renderer & verification
 │   │       ├── Dashboard.tsx    # Metrics grid & equity/drawdown charts
-│   │       └── TradeTable.tsx   # Detailed trade log table with filters
+│   │       └── TradeTable.tsx   # Trade log table with filters & CSV export
 │   └── public/
 │
 ├── .gitignore
@@ -134,6 +142,21 @@ npm install
 npm run dev
 # App opens at http://localhost:5173
 ```
+
+---
+
+## ⚡ Download Performance
+
+The downloader uses a fully async pipeline to maximize throughput while staying within Dukascopy's rate limits:
+
+| Layer | Strategy |
+|---|---|
+| Multi-day parallelism | Up to 6 days downloaded simultaneously (`asyncio.Semaphore(6)`) |
+| Per-day hour parallelism | Up to 8 hourly `.bi5` files fetched concurrently (`asyncio.Semaphore(8)`) |
+| Connection pool | Single shared `httpx.AsyncClient` (50 max connections, 15 keepalive) |
+| Rate-limit handling | HTTP 429 triggers exponential backoff: 1s → 2s → 4s + random jitter, up to 4 retries |
+| Tick parsing | NumPy `frombuffer` on the raw 20-byte struct array — no Python loops |
+| Caching | Per-day 1-minute CSV cache; cached days are served instantly with no network I/O |
 
 ---
 
