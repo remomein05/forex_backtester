@@ -30,6 +30,68 @@ mermaid.initialize({
   securityLevel: 'loose'
 });
 
+export function sanitizeMermaidCode(code: string): string {
+  if (!code) return code;
+
+  const clean = code.replace(/```mermaid\s*/gi, '').replace(/```\s*/g, '').trim();
+  const lines = clean.split('\n');
+  const sanitizedLines: string[] = [];
+
+  for (const line of lines) {
+    const stripped = line.trim();
+    if (stripped.startsWith('%%') || stripped.startsWith('graph ') || stripped.startsWith('flowchart ')) {
+      sanitizedLines.push(line);
+      continue;
+    }
+
+    const edgePlaceholders: string[] = [];
+    const lineProtected = line.replace(/\|([^|]+)\|/g, (_, label: string) => {
+      const trimmed = label.trim();
+      let cleanLabel = trimmed;
+      if (!(trimmed.startsWith('"') && trimmed.endsWith('"'))) {
+        cleanLabel = `"${trimmed.replace(/"/g, '\\"')}"`;
+      }
+      const idx = edgePlaceholders.length;
+      edgePlaceholders.push(`|${cleanLabel}|`);
+      return `__EDGE_LABEL_${idx}__`;
+    });
+
+    const pattern = /(\b[a-zA-Z0-9_\-]+\b)\s*(\[\((.*?)\)\]|\(\[(.*?)\]\)|\[\[(.*?)\]\]|\(\((.*?)\)\)|\{\{(.*?)\}\}|\[(.*?)\]|\((.*?)\)|\{(.*?)\}|>(.*?)\])/g;
+
+    let lineNodesFixed = lineProtected.replace(pattern, (_match, nodeId, _fullShape, g3, g4, g5, g6, g7, g8, g9, g10, g11) => {
+      let openStr = '';
+      let closeStr = '';
+      let content = '';
+
+      if (g3 !== undefined) { openStr = '[('; closeStr = ')]'; content = g3; }
+      else if (g4 !== undefined) { openStr = '(['; closeStr = '])'; content = g4; }
+      else if (g5 !== undefined) { openStr = '[['; closeStr = ']]'; content = g5; }
+      else if (g6 !== undefined) { openStr = '(('; closeStr = '))'; content = g6; }
+      else if (g7 !== undefined) { openStr = '{{'; closeStr = '}}'; content = g7; }
+      else if (g8 !== undefined) { openStr = '['; closeStr = ']'; content = g8; }
+      else if (g9 !== undefined) { openStr = '('; closeStr = ')'; content = g9; }
+      else if (g10 !== undefined) { openStr = '{'; closeStr = '}'; content = g10; }
+      else if (g11 !== undefined) { openStr = '>'; closeStr = ']'; content = g11; }
+
+      const contentTrimmed = content.trim();
+      if (contentTrimmed.startsWith('"') && contentTrimmed.endsWith('"') && contentTrimmed.length >= 2) {
+        return `${nodeId}${openStr}${contentTrimmed}${closeStr}`;
+      }
+
+      const cleanContent = contentTrimmed.replace(/"/g, '\\"');
+      return `${nodeId}${openStr}"${cleanContent}"${closeStr}`;
+    });
+
+    edgePlaceholders.forEach((placeholder, idx) => {
+      lineNodesFixed = lineNodesFixed.replace(`__EDGE_LABEL_${idx}__`, placeholder);
+    });
+
+    sanitizedLines.push(lineNodesFixed);
+  }
+
+  return sanitizedLines.join('\n');
+}
+
 export const FlowchartViewer: React.FC<FlowchartViewerProps> = ({
   chartCode,
   isVerified,
@@ -56,7 +118,7 @@ export const FlowchartViewer: React.FC<FlowchartViewerProps> = ({
       const id = `mermaid-svg-${Math.floor(Math.random() * 100000)}`;
 
       try {
-        const cleanCode = chartCode.trim();
+        const cleanCode = sanitizeMermaidCode(chartCode);
         const { svg, bindFunctions } = await mermaid.render(id, cleanCode);
         
         if (containerRef.current) {

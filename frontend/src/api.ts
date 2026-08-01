@@ -51,7 +51,11 @@ export interface BacktestResponse {
 export interface DownloadProgress {
   progress: number;
   status: string;
+  current_day?: number;
+  total_days?: number;
   date?: string;
+  is_cached?: boolean;
+  candle_count?: number;
   message: string;
 }
 

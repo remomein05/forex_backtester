@@ -10,7 +10,7 @@ import {
 import type { 
   BacktestResponse 
 } from './api';
-import ControlPanel from './components/ControlPanel';
+import ControlPanel, { type DownloadInfo } from './components/ControlPanel';
 import StrategyEditor from './components/StrategyEditor';
 import FlowchartViewer from './components/FlowchartViewer';
 import Dashboard from './components/Dashboard';
@@ -50,6 +50,16 @@ export const App: React.FC = () => {
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [downloadStatus, setDownloadStatus] = useState<string>('');
+  const [downloadInfo, setDownloadInfo] = useState<DownloadInfo>({
+    currentDay: 0,
+    totalDays: 0,
+    currentDate: '',
+    isCached: false,
+    candleCount: 0,
+    totalCandles: 0,
+    elapsedSeconds: 0,
+    etaSeconds: null
+  });
   const [isDataReady, setIsDataReady] = useState<boolean>(false);
   
   const [isFlowchartLoading, setIsFlowchartLoading] = useState<boolean>(false);
@@ -80,16 +90,58 @@ export const App: React.FC = () => {
     setIsDataReady(false);
     setError(null);
 
+    const startTime = Date.now();
+    setDownloadInfo({
+      currentDay: 0,
+      totalDays: 0,
+      currentDate: '',
+      isCached: false,
+      candleCount: 0,
+      totalCandles: 0,
+      elapsedSeconds: 0,
+      etaSeconds: null
+    });
+
+    const timer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      setDownloadInfo(prev => {
+        let eta: number | null = null;
+        if (prev.totalDays > 0 && prev.currentDay > 0 && prev.currentDay < prev.totalDays) {
+          const remainingDays = prev.totalDays - prev.currentDay;
+          const secPerDay = elapsed / prev.currentDay;
+          eta = Math.max(1, Math.round(remainingDays * secPerDay));
+        }
+        return {
+          ...prev,
+          elapsedSeconds: elapsed,
+          etaSeconds: eta
+        };
+      });
+    }, 1000);
+
     try {
       await downloadData(selectedPair, startDate, endDate, (prog) => {
         setDownloadProgress(prog.progress);
         setDownloadStatus(prog.message || prog.status);
+
+        if (prog.current_day !== undefined && prog.total_days !== undefined) {
+          setDownloadInfo(prev => ({
+            ...prev,
+            currentDay: prog.current_day || prev.currentDay,
+            totalDays: prog.total_days || prev.totalDays,
+            currentDate: prog.date || prev.currentDate,
+            isCached: prog.is_cached ?? prev.isCached,
+            candleCount: prog.candle_count || 0,
+            totalCandles: prev.totalCandles + (prog.candle_count || 0)
+          }));
+        }
       });
       setIsDataReady(true);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Failed to download and parse price data.');
     } finally {
+      clearInterval(timer);
       setIsDownloading(false);
     }
   };
@@ -221,6 +273,7 @@ export const App: React.FC = () => {
             isDownloading={isDownloading}
             downloadProgress={downloadProgress}
             downloadStatus={downloadStatus}
+            downloadInfo={downloadInfo}
             isDataReady={isDataReady}
           />
         </aside>

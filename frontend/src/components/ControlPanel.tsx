@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
 import { Database, Download, CheckCircle, RefreshCw } from 'lucide-react';
 
+export interface DownloadInfo {
+  currentDay: number;
+  totalDays: number;
+  currentDate: string;
+  isCached: boolean;
+  candleCount: number;
+  totalCandles: number;
+  elapsedSeconds: number;
+  etaSeconds: number | null;
+}
+
 interface ControlPanelProps {
   pairs: string[];
   selectedPair: string;
@@ -23,8 +34,15 @@ interface ControlPanelProps {
   isDownloading: boolean;
   downloadProgress: number;
   downloadStatus: string;
+  downloadInfo: DownloadInfo;
   isDataReady: boolean;
 }
+
+const formatSeconds = (sec: number): string => {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({
   pairs,
@@ -48,6 +66,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   isDownloading,
   downloadProgress,
   downloadStatus,
+  downloadInfo,
   isDataReady
 }) => {
   const [customSymbolInput, setCustomSymbolInput] = useState<string>('');
@@ -212,22 +231,88 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         </button>
 
         {isDownloading && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              <span>Downloading Ticks</span>
-              <span>{downloadProgress}%</span>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: '0.6rem',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-glass)',
+            padding: '0.75rem',
+            borderRadius: '8px'
+          }}>
+            {/* Header: Label & % */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', fontWeight: 600 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-cyan)' }}>
+                <RefreshCw className="pulse" size={14} /> Fetching Tick Data
+              </span>
+              <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                {downloadProgress}%
+              </span>
             </div>
-            <div style={{ width: '100%', height: '6px', background: 'var(--bg-secondary)', borderRadius: '3px', overflow: 'hidden' }}>
+
+            {/* Progress Bar */}
+            <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden' }}>
               <div 
                 style={{ 
                   width: `${downloadProgress}%`, 
                   height: '100%', 
-                  background: 'linear-gradient(to right, var(--accent-cyan), var(--accent-purple))',
-                  transition: 'width 0.2s ease-out'
+                  background: 'linear-gradient(90deg, var(--accent-cyan), var(--accent-purple))',
+                  transition: 'width 0.3s ease-out'
                 }}
               />
             </div>
-            <span style={{ fontSize: '0.7rem', color: 'var(--accent-cyan)', textAlign: 'right', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+
+            {/* Detailed Metrics Grid */}
+            {downloadInfo && downloadInfo.totalDays > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.2rem', fontSize: '0.75rem' }}>
+                
+                {/* Day Counter & Status Pill */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>
+                    Day <strong style={{ color: 'var(--text-primary)' }}>{downloadInfo.currentDay}</strong> of <strong>{downloadInfo.totalDays}</strong>
+                    {downloadInfo.currentDate && ` (${downloadInfo.currentDate})`}
+                  </span>
+                  {downloadInfo.isCached ? (
+                    <span style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 500 }}>
+                      ⚡ Cached
+                    </span>
+                  ) : (
+                    <span style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#a855f7', border: '1px solid rgba(168, 85, 247, 0.3)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 500 }}>
+                      🌐 Downloading bi5
+                    </span>
+                  )}
+                </div>
+
+                {/* Timers: Elapsed & ETA */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.4rem 0.5rem', borderRadius: '6px' }}>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.7rem' }}>Elapsed Time</span>
+                    <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontWeight: 600 }}>
+                      {formatSeconds(downloadInfo.elapsedSeconds)}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.7rem' }}>Est. Remaining</span>
+                    <span style={{ color: 'var(--accent-cyan)', fontFamily: 'monospace', fontWeight: 600 }}>
+                      {downloadInfo.etaSeconds !== null ? `~${formatSeconds(downloadInfo.etaSeconds)}` : 'Calculating...'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Candles fetched count */}
+                {downloadInfo.totalCandles > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                    <span>Processed OHLCV</span>
+                    <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
+                      {downloadInfo.totalCandles.toLocaleString()} candles
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Status log text */}
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '0.1rem' }}>
               {downloadStatus}
             </span>
           </div>

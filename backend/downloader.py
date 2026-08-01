@@ -71,6 +71,12 @@ def download_hour_ticks(symbol: str, date: datetime.date, hour: int) -> list:
         print(f"Error downloading {url}: {e}")
         return []
 
+def is_day_cached(symbol: str, date: datetime.date) -> bool:
+    """Checks whether 1-minute OHLCV data for a given day is already cached locally."""
+    symbol_dir = os.path.join(DATA_DIR, symbol.upper())
+    cache_path = os.path.join(symbol_dir, f"{date.strftime('%Y_%m_%d')}_1m.csv")
+    return os.path.exists(cache_path)
+
 def download_and_cache_day(symbol: str, date: datetime.date) -> pd.DataFrame:
     """
     Downloads all 24 hours of tick data for a given day in parallel,

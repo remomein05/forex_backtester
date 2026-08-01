@@ -63,7 +63,7 @@ Follow these strict rules:
 3. Keep labels inside nodes short and professional (e.g. "EMA 20 > EMA 50?", "RSI < 30?", "Buy (Long)", "Set SL/TP").
 4. Label branches clearly (e.g. with `|Yes|`, `|No|`, `|True|`, `|False|`).
 5. Ensure all blocks have a logical progression and lead to either Action (Buy/Sell/Hold/Exit) or termination.
-6. Do NOT use HTML formatting, parentheses, or brackets inside the flowchart node labels unless they are enclosed in double quotes (e.g., node_id["Label (Extra)"] or node_id["RSI > 50"]).
+6. CRITICAL: ALWAYS enclose node text labels in double quotes inside shape brackets (e.g. node_id["Label (Extra)"] or node_id["RSI > 50"] or node_id["Buy (Long)"]). Never leave text unquoted if it contains parentheses, comparison operators, spaces, or special symbols.
 """
 
 STRATEGY_SYSTEM_PROMPT = f"""
@@ -121,6 +121,96 @@ def get_client(api_key: str = None) -> genai.Client:
         raise ValueError("Gemini API key not found. Please provide an API key in the UI or set GEMINI_API_KEY in backend environment.")
     return genai.Client(api_key=key)
 
+def sanitize_mermaid_code(code: str) -> str:
+    """Sanitizes Mermaid.js flowchart syntax by wrapping unquoted node and edge labels in double quotes."""
+    if not code:
+        return code
+
+    # 1. Strip markdown code fences if present
+    code = re.sub(r'```mermaid\s*', '', code, flags=re.IGNORECASE)
+    code = re.sub(r'```\s*', '', code)
+    code = code.strip()
+
+    lines = code.split('\n')
+    sanitized_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        # Skip comment or graph definition header
+        if stripped.startswith('%%') or stripped.startswith('graph ') or stripped.startswith('flowchart '):
+            sanitized_lines.append(line)
+            continue
+
+        # Step A: Protect/quote edge labels |...| so node regex doesn't match inside them
+        edge_placeholders = []
+        def protect_edge(m):
+            label = m.group(1).strip()
+            if not (label.startswith('"') and label.endswith('"')):
+                clean = label.replace('"', '\\"')
+                label = f'"{clean}"'
+            idx = len(edge_placeholders)
+            edge_placeholders.append(f'|{label}|')
+            return f'__EDGE_LABEL_{idx}__'
+
+        line_protected = re.sub(r'\|([^|]+)\|', protect_edge, line)
+
+        # Step B: Match node shape definitions on the line
+        pattern = (
+            r'(\b[a-zA-Z0-9_\-]+\b)\s*'
+            r'('
+            r'\[\((.*?)\)\]|'
+            r'\(\[(.*?)\]\)|'
+            r'\[\[(.*?)\]\]|'
+            r'\(\((.*?)\)\)|'
+            r'\{\{(.*?)\}\}|'
+            r'\[(.*?)\]|'
+            r'\((.*?)\)|'
+            r'\{(.*?)\}|'
+            r'>(.*?)\]'
+            r')'
+        )
+
+        def sub_node(m):
+            node_id = m.group(1)
+            
+            # Identify which shape matched
+            if m.group(3) is not None:
+                open_str, close_str, content = "[(", ")]", m.group(3)
+            elif m.group(4) is not None:
+                open_str, close_str, content = "([", "])", m.group(4)
+            elif m.group(5) is not None:
+                open_str, close_str, content = "[[", "]]", m.group(5)
+            elif m.group(6) is not None:
+                open_str, close_str, content = "((", "))", m.group(6)
+            elif m.group(7) is not None:
+                open_str, close_str, content = "{{", "}}", m.group(7)
+            elif m.group(8) is not None:
+                open_str, close_str, content = "[", "]", m.group(8)
+            elif m.group(9) is not None:
+                open_str, close_str, content = "(", ")", m.group(9)
+            elif m.group(10) is not None:
+                open_str, close_str, content = "{", "}", m.group(10)
+            elif m.group(11) is not None:
+                open_str, close_str, content = ">", "]", m.group(11)
+
+            content_trimmed = content.strip()
+            # If already enclosed in quotes, don't double quote
+            if content_trimmed.startswith('"') and content_trimmed.endswith('"') and len(content_trimmed) >= 2:
+                return f'{node_id}{open_str}{content_trimmed}{close_str}'
+            
+            clean_content = content_trimmed.replace('"', '\\"')
+            return f'{node_id}{open_str}"{clean_content}"{close_str}'
+
+        line_nodes_fixed = re.sub(pattern, sub_node, line_protected)
+
+        # Step C: Restore edge labels
+        for idx, placeholder in enumerate(edge_placeholders):
+            line_nodes_fixed = line_nodes_fixed.replace(f'__EDGE_LABEL_{idx}__', placeholder)
+
+        sanitized_lines.append(line_nodes_fixed)
+
+    return '\n'.join(sanitized_lines)
+
 def generate_flowchart(strategy_desc: str, api_key: str = None, model: str = "gemini-2.5-flash") -> str:
     """Generates a Mermaid.js flowchart from strategy description."""
     client = get_client(api_key)
@@ -139,10 +229,8 @@ def generate_flowchart(strategy_desc: str, api_key: str = None, model: str = "ge
     text = response.text
     # Extract mermaid markdown block if present
     match = re.search(r"```mermaid\s+(.*?)\s+```", text, re.DOTALL | re.IGNORECASE)
-    if match:
-        return match.group(1).strip()
-    
-    return text.strip()
+    raw_code = match.group(1).strip() if match else text.strip()
+    return sanitize_mermaid_code(raw_code)
 
 def generate_strategy_code(strategy_desc: str, api_key: str = None, model: str = "gemini-2.5-flash", higher_timeframe: str = None) -> str:
     """Generates backtesting.py compatible python code from strategy description."""

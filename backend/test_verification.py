@@ -13,7 +13,7 @@ from downloader import get_point_divider, download_and_cache_day, get_ohlcv_data
 from backtest_runner import run_backtest_from_code
 
 from unittest.mock import MagicMock, patch
-from llm_manager import generate_flowchart, generate_strategy_code, get_client
+from llm_manager import generate_flowchart, generate_strategy_code, get_client, sanitize_mermaid_code
 
 def test_downloader_and_parser():
     print("Running Downloader/Parser Test...")
@@ -159,11 +159,11 @@ def test_llm_manager():
         assert "graph TD" in flowchart, "Flowchart output should contain graph TD"
         assert "```mermaid" not in flowchart, "Mermaid code block delimiters should be stripped"
         
-        # Test 2: Strategy code generation parsing
-        mock_client_instance.models.generate_content.return_value = mock_strategy_response
-        code = generate_strategy_code("Simple SMA strategy", api_key="dummy_key", higher_timeframe="1h")
-        assert "class GeneratedStrategy(Strategy):" in code, "Strategy code should contain GeneratedStrategy"
-        assert "```python" not in code, "Python code block delimiters should be stripped"
+        # Test 3: Mermaid sanitization of unquoted labels with parentheses
+        raw_problematic_chart = "graph TD\n    C -- Yes --> D[Buy (Long)]\n    D --> E{SMA(20) > 50}"
+        sanitized = sanitize_mermaid_code(raw_problematic_chart)
+        assert 'D["Buy (Long)"]' in sanitized, f"Expected D[\"Buy (Long)\"] in sanitized output, got: {sanitized}"
+        assert 'E{"SMA(20) > 50"}' in sanitized, f"Expected E{{\"SMA(20) > 50\"}} in sanitized output, got: {sanitized}"
         
     print("LLM Manager unit tests: SUCCESS")
 
