@@ -144,11 +144,15 @@ def generate_flowchart(strategy_desc: str, api_key: str = None, model: str = "ge
     
     return text.strip()
 
-def generate_strategy_code(strategy_desc: str, api_key: str = None, model: str = "gemini-2.5-flash") -> str:
+def generate_strategy_code(strategy_desc: str, api_key: str = None, model: str = "gemini-2.5-flash", higher_timeframe: str = None) -> str:
     """Generates backtesting.py compatible python code from strategy description."""
     client = get_client(api_key)
     
-    contents = f"Strategy Description: {strategy_desc}\n\nGenerate the backtesting.py strategy Python class."
+    mtf_text = ""
+    if higher_timeframe and higher_timeframe.lower() != "none":
+        mtf_text = f"\nMulti-Timeframe Mode Enabled: Higher Timeframe is '{higher_timeframe}'. Higher timeframe price columns are available as self.data.Open_htf, self.data.High_htf, self.data.Low_htf, self.data.Close_htf. Use these columns if higher timeframe trend/filtering is needed in the strategy."
+        
+    contents = f"Strategy Description: {strategy_desc}{mtf_text}\n\nGenerate the backtesting.py strategy Python class."
     
     response = client.models.generate_content(
         model=model,

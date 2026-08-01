@@ -22,6 +22,7 @@ export const App: React.FC = () => {
   const [selectedPair, setSelectedPair] = useState<string>('EURUSD');
   const [isCustomPair, setIsCustomPair] = useState<boolean>(false);
   const [timeframe, setTimeframe] = useState<string>('1h');
+  const [higherTimeframe, setHigherTimeframe] = useState<string>('none');
   
   // Date range clamped to 2026
   const [startDate, setStartDate] = useState<string>('2026-01-01');
@@ -124,7 +125,7 @@ export const App: React.FC = () => {
     setError(null);
 
     try {
-      const res = await generateStrategy(strategyDesc, apiKey || undefined, selectedModel);
+      const res = await generateStrategy(strategyDesc, apiKey || undefined, selectedModel, higherTimeframe);
       setGeneratedCode(res.code);
     } catch (err: any) {
       console.error(err);
@@ -152,6 +153,7 @@ export const App: React.FC = () => {
         startDate,
         endDate,
         timeframe,
+        higherTimeframe !== 'none' ? higherTimeframe : undefined,
         cash,
         commission
       );
@@ -205,6 +207,8 @@ export const App: React.FC = () => {
             setIsCustomPair={setIsCustomPair}
             timeframe={timeframe}
             setTimeframe={setTimeframe}
+            higherTimeframe={higherTimeframe}
+            setHigherTimeframe={setHigherTimeframe}
             startDate={startDate}
             setStartDate={setStartDate}
             endDate={endDate}

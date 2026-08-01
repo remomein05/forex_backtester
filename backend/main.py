@@ -45,6 +45,7 @@ class StrategyRequest(BaseModel):
     strategy_desc: str
     api_key: Optional[str] = None
     model: Optional[str] = "gemini-2.5-flash"
+    higher_timeframe: Optional[str] = None
 
 class BacktestRequest(BaseModel):
     code: str
@@ -52,6 +53,7 @@ class BacktestRequest(BaseModel):
     start_date: str
     end_date: str
     timeframe: str
+    higher_timeframe: Optional[str] = None
     cash: Optional[float] = 10000.0
     commission: Optional[float] = 0.0002
 
@@ -131,7 +133,8 @@ def handle_generate_strategy(req: StrategyRequest):
         code = generate_strategy_code(
             strategy_desc=req.strategy_desc,
             api_key=req.api_key,
-            model=req.model
+            model=req.model,
+            higher_timeframe=req.higher_timeframe
         )
         return {"code": code}
     except Exception as e:
@@ -158,7 +161,7 @@ def handle_backtest(req: BacktestRequest):
         
     # Get historical data (downloads on-the-fly if not already cached)
     try:
-        df = get_ohlcv_data(req.symbol, start, end, req.timeframe)
+        df = get_ohlcv_data(req.symbol, start, end, req.timeframe, req.higher_timeframe)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {str(e)}")
         

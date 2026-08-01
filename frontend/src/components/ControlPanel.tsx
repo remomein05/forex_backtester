@@ -9,6 +9,8 @@ interface ControlPanelProps {
   setIsCustomPair: (custom: boolean) => void;
   timeframe: string;
   setTimeframe: (tf: string) => void;
+  higherTimeframe: string;
+  setHigherTimeframe: (htf: string) => void;
   startDate: string;
   setStartDate: (date: string) => void;
   endDate: string;
@@ -32,6 +34,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   setIsCustomPair,
   timeframe,
   setTimeframe,
+  higherTimeframe,
+  setHigherTimeframe,
   startDate,
   setStartDate,
   endDate,
@@ -111,16 +115,28 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         )}
       </div>
 
-      {/* Timeframe */}
-      <div>
-        <label htmlFor="timeframeSelect">Candle Timeframe</label>
-        <select id="timeframeSelect" value={timeframe} onChange={(e) => setTimeframe(e.target.value)} style={{ fontSize: '0.9rem' }}>
-          <option value="1m">1 Minute</option>
-          <option value="5m">5 Minutes</option>
-          <option value="15m">15 Minutes</option>
-          <option value="1h">1 Hour</option>
-          <option value="1d">1 Day</option>
-        </select>
+      {/* Timeframes (Primary & Higher Timeframe Filter) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+        <div>
+          <label htmlFor="timeframeSelect">Primary Timeframe</label>
+          <select id="timeframeSelect" value={timeframe} onChange={(e) => setTimeframe(e.target.value)} style={{ fontSize: '0.85rem' }}>
+            <option value="1m">1 Minute</option>
+            <option value="5m">5 Minutes</option>
+            <option value="15m">15 Minutes</option>
+            <option value="1h">1 Hour</option>
+            <option value="1d">1 Day</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="htfSelect">Higher TF (Filter)</label>
+          <select id="htfSelect" value={higherTimeframe} onChange={(e) => setHigherTimeframe(e.target.value)} style={{ fontSize: '0.85rem' }}>
+            <option value="none">None (Single TF)</option>
+            <option value="5m">5 Minutes</option>
+            <option value="15m">15 Minutes</option>
+            <option value="1h">1 Hour</option>
+            <option value="1d">1 Day</option>
+          </select>
+        </div>
       </div>
 
       {/* Date Range (Strictly limited to 2026) */}

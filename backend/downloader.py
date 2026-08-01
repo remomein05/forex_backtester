@@ -125,11 +125,12 @@ def download_and_cache_day(symbol: str, date: datetime.date) -> pd.DataFrame:
     df_1m.to_csv(cache_path)
     return df_1m
 
-def get_ohlcv_data(symbol: str, start_date: datetime.date, end_date: datetime.date, timeframe: str) -> pd.DataFrame:
+def get_ohlcv_data(symbol: str, start_date: datetime.date, end_date: datetime.date, timeframe: str, higher_timeframe: str = None) -> pd.DataFrame:
     """
     Retrieves and aggregates OHLCV data for a given range.
     Enforces the 2026 restriction.
     Timeframe is one of: '1m', '5m', '15m', '1h', '1d'
+    Higher timeframe (optional) adds merged HTF columns (Open_htf, High_htf, Low_htf, Close_htf).
     """
     symbol = symbol.upper()
     
@@ -167,10 +168,6 @@ def get_ohlcv_data(symbol: str, start_date: datetime.date, end_date: datetime.da
     
     offset = tf_map.get(timeframe.lower(), "1D")
     
-    if offset == "1min":
-        return df_all
-        
-    # Resample to user target timeframe
     resample_rules = {
         "Open": "first",
         "High": "max",
@@ -178,8 +175,30 @@ def get_ohlcv_data(symbol: str, start_date: datetime.date, end_date: datetime.da
         "Close": "last",
         "Volume": "sum"
     }
-    
-    df_resampled = df_all.resample(offset).agg(resample_rules)
-    df_resampled.dropna(subset=["Open"], inplace=True)
-    
+
+    if offset == "1min":
+        df_resampled = df_all.copy()
+    else:
+        df_resampled = df_all.resample(offset).agg(resample_rules)
+        df_resampled.dropna(subset=["Open"], inplace=True)
+
+    # Process Higher Timeframe if provided and different from primary timeframe
+    if higher_timeframe and higher_timeframe.lower() in tf_map and higher_timeframe.lower() != timeframe.lower():
+        htf_offset = tf_map[higher_timeframe.lower()]
+        df_htf = df_all.resample(htf_offset).agg(resample_rules).dropna(subset=["Open"])
+        df_htf.columns = [f"{col}_htf" for col in df_htf.columns]
+        
+        # Merge HTF columns into primary DataFrame using reindex + ffill
+        df_resampled = pd.merge_asof(
+            df_resampled,
+            df_htf,
+            left_index=True,
+            right_index=True,
+            direction="backward"
+        )
+        # Fill any initial NaNs if primary timeframe starts before first HTF candle finishes
+        for col in df_htf.columns:
+            if col in df_resampled.columns:
+                df_resampled[col] = df_resampled[col].bfill().ffill()
+
     return df_resampled

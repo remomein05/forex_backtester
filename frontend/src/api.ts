@@ -80,14 +80,15 @@ export async function generateFlowchart(strategyDesc: string, apiKey?: string, m
   return res.json();
 }
 
-export async function generateStrategy(strategyDesc: string, apiKey?: string, model?: string): Promise<StrategyResponse> {
+export async function generateStrategy(strategyDesc: string, apiKey?: string, model?: string, higherTimeframe?: string): Promise<StrategyResponse> {
   const res = await fetch(`${API_BASE}/generate-strategy`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ 
       strategy_desc: strategyDesc, 
       api_key: apiKey || undefined,
-      model: model || undefined
+      model: model || undefined,
+      higher_timeframe: higherTimeframe || undefined
     }),
   });
   if (!res.ok) {
@@ -103,6 +104,7 @@ export async function runBacktest(
   startDate: string,
   endDate: string,
   timeframe: string,
+  higherTimeframe: string | undefined,
   cash: number,
   commission: number
 ): Promise<BacktestResponse> {
@@ -115,6 +117,7 @@ export async function runBacktest(
       start_date: startDate,
       end_date: endDate,
       timeframe,
+      higher_timeframe: higherTimeframe || undefined,
       cash,
       commission,
     }),
