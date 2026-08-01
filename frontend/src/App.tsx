@@ -35,6 +35,7 @@ export const App: React.FC = () => {
   const [strategyDesc, setStrategyDesc] = useState<string>(
     'SMA crossover strategy. Buy long when the 10-period SMA crosses above the 50-period SMA. Sell short (or close long) when the 10-period SMA crosses below the 50-period SMA. Set a 1% stop loss and a 2% take profit on all entries.'
   );
+  const [llmProvider, setLlmProvider] = useState<string>('agy_cli');
   const [apiKey, setApiKey] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
   
@@ -155,7 +156,7 @@ export const App: React.FC = () => {
     setError(null);
 
     try {
-      const res = await generateFlowchart(strategyDesc, apiKey || undefined, selectedModel);
+      const res = await generateFlowchart(strategyDesc, apiKey || undefined, selectedModel, llmProvider);
       setFlowchartCode(res.flowchart);
     } catch (err: any) {
       console.error(err);
@@ -177,7 +178,7 @@ export const App: React.FC = () => {
     setError(null);
 
     try {
-      const res = await generateStrategy(strategyDesc, apiKey || undefined, selectedModel, higherTimeframe);
+      const res = await generateStrategy(strategyDesc, apiKey || undefined, selectedModel, higherTimeframe, llmProvider);
       setGeneratedCode(res.code);
     } catch (err: any) {
       console.error(err);
@@ -187,15 +188,18 @@ export const App: React.FC = () => {
     }
   };
 
-  // Action: Run Backtest
+  // Action: Execute Backtest
   const handleRunBacktest = async () => {
-    if (!generatedCode) {
-      setError('No strategy code found. Generate the code first.');
+    if (!generatedCode.trim()) {
+      setError('Strategy python code is empty.');
+      return;
+    }
+    if (!isDataReady) {
+      setError('Please download historical price data first.');
       return;
     }
 
     setIsBacktestRunning(true);
-    setBacktestResults(null);
     setError(null);
 
     try {
@@ -205,14 +209,14 @@ export const App: React.FC = () => {
         startDate,
         endDate,
         timeframe,
-        higherTimeframe !== 'none' ? higherTimeframe : undefined,
+        higherTimeframe,
         cash,
         commission
       );
       setBacktestResults(results);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Backtest execution crashed. Review generated python script.');
+      setError(err.message || 'Backtest execution failed.');
     } finally {
       setIsBacktestRunning(false);
     }
@@ -220,15 +224,18 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-container">
-      {/* Header */}
-      <header>
-        <div className="logo-container">
-          <div className="logo-icon">F</div>
-          <div className="logo-text">ForexStrategy<span>Backtester</span></div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(6, 182, 212, 0.1)', padding: '0.4rem 0.8rem', borderRadius: '20px', border: '1px solid rgba(6, 182, 212, 0.2)' }}>
-          <Cpu size={14} style={{ color: 'var(--accent-cyan)' }} />
-          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent-cyan)' }}>Active Engine: Gemini API</span>
+      {/* Header Bar */}
+      <header className="app-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <Cpu size={28} style={{ color: 'var(--accent-cyan)' }} />
+          <div>
+            <h1 style={{ fontSize: '1.4rem', fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>
+              Forex Strategy Backtester & Compiler
+            </h1>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
+              AI-Powered Strategy Generation with Dukascopy Tick Precision
+            </p>
+          </div>
         </div>
       </header>
 
@@ -246,7 +253,7 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Main Workspace Layout */}
+      {/* Main Layout Body */}
       <div className="main-layout">
         
         {/* Left Control Sidebar */}
@@ -286,6 +293,8 @@ export const App: React.FC = () => {
             <StrategyEditor
               strategyDesc={strategyDesc}
               setStrategyDesc={setStrategyDesc}
+              llmProvider={llmProvider}
+              setLlmProvider={setLlmProvider}
               apiKey={apiKey}
               setApiKey={setApiKey}
               selectedModel={selectedModel}
