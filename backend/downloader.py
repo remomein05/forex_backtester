@@ -47,6 +47,20 @@ def get_point_divider(symbol: str) -> float:
     else:
         return 100000.0  # Standard 5-decimal pairs
 
+def get_valid_hours_for_date(date: datetime.date) -> list[int]:
+    """
+    Returns valid Forex trading hours for a given date.
+    - Saturday (weekday 5): 0 hours (market closed)
+    - Sunday (weekday 6): hours 21..23 only (Sydney/Tokyo market opens ~21:00 UTC)
+    - Mon-Fri (weekdays 0..4): all 24 hours (0..23)
+    """
+    weekday = date.weekday()
+    if weekday == 5:
+        return []
+    elif weekday == 6:
+        return [21, 22, 23]
+    return list(range(24))
+
 def download_hour_ticks(symbol: str, date: datetime.date, hour: int, session: requests.Session = None) -> pd.DataFrame:
     """
     Downloads and parses tick data for a single hour using vectorized NumPy binary parsing.
@@ -93,7 +107,7 @@ def is_day_cached(symbol: str, date: datetime.date) -> bool:
 
 def download_and_cache_day(symbol: str, date: datetime.date, session: requests.Session = None) -> pd.DataFrame:
     """
-    Downloads all 24 hours of tick data for a given day in parallel,
+    Downloads all valid trading hours of tick data for a given day in parallel,
     aggregates it into 1-minute OHLCV candles, and caches it as a CSV.
     """
     symbol_dir = os.path.join(DATA_DIR, symbol.upper())
@@ -108,8 +122,8 @@ def download_and_cache_day(symbol: str, date: datetime.date, session: requests.S
         except Exception as e:
             print(f"Failed to read cache {cache_path}, re-downloading: {e}")
 
-    # Saturday is fully closed in Forex market
-    if date.weekday() == 5:
+    valid_hours = get_valid_hours_for_date(date)
+    if not valid_hours:
         df_empty = pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
         df_empty.to_csv(cache_path)
         return df_empty
@@ -120,20 +134,18 @@ def download_and_cache_day(symbol: str, date: datetime.date, session: requests.S
     print(f"Downloading data for {symbol} on {date.strftime('%Y-%m-%d')}...")
     
     hour_dfs = []
-    with ThreadPoolExecutor(max_workers=24) as executor:
-        futures = [executor.submit(download_hour_ticks, symbol, date, h, session) for h in range(24)]
+    with ThreadPoolExecutor(max_workers=min(len(valid_hours), 24)) as executor:
+        futures = [executor.submit(download_hour_ticks, symbol, date, h, session) for h in valid_hours]
         for future in as_completed(futures):
             df_hour = future.result()
             if not df_hour.empty:
                 hour_dfs.append(df_hour)
             
     if not hour_dfs:
-        # Save empty file to signify weekend/no data and avoid re-download attempts
         df_empty = pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
         df_empty.to_csv(cache_path)
         return df_empty
         
-    # Convert to DataFrame
     df_ticks = pd.concat(hour_dfs)
     df_ticks.sort_index(inplace=True)
     
@@ -171,14 +183,22 @@ def get_ohlcv_data(symbol: str, start_date: datetime.date, end_date: datetime.da
         raise ValueError("Invalid date range within 2026.")
         
     delta = end_date - start_date
-    daily_dfs = []
+    total_days = delta.days + 1
     
-    # Download/cache day by day
-    for i in range(delta.days + 1):
-        current_date = start_date + datetime.timedelta(days=i)
-        df_day = download_and_cache_day(symbol, current_date)
-        if not df_day.empty:
-            daily_dfs.append(df_day)
+    # Download/cache days in parallel (up to 6 days concurrently)
+    daily_results = {}
+    with ThreadPoolExecutor(max_workers=min(total_days, 6)) as executor:
+        futures = {executor.submit(download_and_cache_day, symbol, start_date + datetime.timedelta(days=i)): i for i in range(total_days)}
+        for future in as_completed(futures):
+            idx = futures[future]
+            try:
+                df_day = future.result()
+                if df_day is not None and not df_day.empty:
+                    daily_results[idx] = df_day
+            except Exception as e:
+                print(f"Error downloading day {idx}: {e}")
+
+    daily_dfs = [daily_results[i] for i in sorted(daily_results.keys()) if i in daily_results]
             
     if not daily_dfs:
         return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])

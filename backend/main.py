@@ -2,6 +2,7 @@ import os
 import json
 import datetime
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 # pyrefly: ignore [missing-import]
 from fastapi import FastAPI, HTTPException, Body
 # pyrefly: ignore [missing-import]
@@ -93,25 +94,35 @@ async def download_data(req: DownloadRequest):
     total_days = delta.days + 1
     
     async def progress_stream():
-        yield f"data: {json.dumps({'progress': 0, 'status': 'starting', 'current_day': 0, 'total_days': total_days, 'message': f'Initializing download for {symbol} ({total_days} days)'})}\n\n"
+        yield f"data: {json.dumps({'progress': 0, 'status': 'starting', 'current_day': 0, 'total_days': total_days, 'message': f'Initializing multi-day download for {symbol} ({total_days} days)'})}\n\n"
         
-        for i in range(total_days):
-            current_date = start + datetime.timedelta(days=i)
-            date_str = current_date.strftime("%Y-%m-%d")
+        loop = asyncio.get_running_loop()
+        completed_days = 0
+        all_dates = [start + datetime.timedelta(days=i) for i in range(total_days)]
+        
+        def process_day(current_date):
             cached = is_day_cached(symbol, current_date)
+            df_day = download_and_cache_day(symbol, current_date)
+            candle_count = len(df_day) if df_day is not None else 0
+            return current_date, cached, candle_count
             
-            try:
-                # Run blocking downloader in a worker thread to keep event loop responsive
-                df_day = await asyncio.to_thread(download_and_cache_day, symbol, current_date)
-                candle_count = len(df_day) if df_day is not None else 0
-                progress = int(((i + 1) / total_days) * 100)
-                status_label = "cached" if cached else "downloaded"
-                msg = f"Loaded {date_str} from cache ({candle_count} candles)" if cached else f"Downloaded & aggregated {date_str} ({candle_count} candles)"
-                
-                yield f"data: {json.dumps({'progress': progress, 'status': status_label, 'current_day': i + 1, 'total_days': total_days, 'date': date_str, 'is_cached': cached, 'candle_count': candle_count, 'message': msg})}\n\n"
-            except Exception as e:
-                yield f"data: {json.dumps({'progress': int(((i + 1) / total_days) * 100), 'status': 'error', 'current_day': i + 1, 'total_days': total_days, 'date': date_str, 'is_cached': False, 'candle_count': 0, 'message': f'Error: {str(e)}'})}\n\n"
-                
+        with ThreadPoolExecutor(max_workers=min(total_days, 6)) as executor:
+            tasks = [loop.run_in_executor(executor, process_day, d) for d in all_dates]
+            for future in asyncio.as_completed(tasks):
+                try:
+                    current_date, cached, candle_count = await future
+                    completed_days += 1
+                    date_str = current_date.strftime("%Y-%m-%d")
+                    progress = int((completed_days / total_days) * 100)
+                    status_label = "cached" if cached else "downloaded"
+                    msg = f"Loaded {date_str} from cache ({candle_count} candles)" if cached else f"Downloaded & aggregated {date_str} ({candle_count} candles)"
+                    
+                    yield f"data: {json.dumps({'progress': progress, 'status': status_label, 'current_day': completed_days, 'total_days': total_days, 'date': date_str, 'is_cached': cached, 'candle_count': candle_count, 'message': msg})}\n\n"
+                except Exception as e:
+                    completed_days += 1
+                    progress = int((completed_days / total_days) * 100)
+                    yield f"data: {json.dumps({'progress': progress, 'status': 'error', 'current_day': completed_days, 'total_days': total_days, 'date': '', 'is_cached': False, 'candle_count': 0, 'message': f'Error: {str(e)}'})}\n\n"
+                    
         yield f"data: {json.dumps({'progress': 100, 'status': 'completed', 'current_day': total_days, 'total_days': total_days, 'message': 'Data fetch complete'})}\n\n"
         
     return StreamingResponse(progress_stream(), media_type="text/event-stream")
