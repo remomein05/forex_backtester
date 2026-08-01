@@ -1,5 +1,6 @@
 import os
 import re
+import subprocess
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
@@ -115,11 +116,52 @@ Guidelines:
 
 def get_client(api_key: str = None) -> genai.Client:
     """Initializes the google-genai Client."""
-    # Use user-provided API key, otherwise default to env variable GEMINI_API_KEY or GOOGLE_API_KEY
     key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not key:
         raise ValueError("Gemini API key not found. Please provide an API key in the UI or set GEMINI_API_KEY in backend environment.")
     return genai.Client(api_key=key)
+
+def call_llm(
+    prompt: str,
+    system_instruction: str,
+    provider: str = "agy_cli",
+    api_key: str = None,
+    model: str = "gemini-2.5-flash"
+) -> str:
+    """Dispatches LLM calls either through local AGY CLI or Google Gemini API Key."""
+    if provider == "agy_cli":
+        combined_prompt = f"System Instructions:\n{system_instruction}\n\nTask Request:\n{prompt}"
+        cmd = ["agy", "--print", combined_prompt]
+        if model:
+            cmd.extend(["--model", model])
+        
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=180
+            )
+            if result.returncode != 0:
+                err_detail = result.stderr.strip() or f"AGY CLI returned exit code {result.returncode}"
+                raise RuntimeError(f"AGY CLI Error: {err_detail}")
+            return result.stdout.strip()
+        except FileNotFoundError:
+            raise RuntimeError("AGY CLI ('agy') command not found on server system PATH.")
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("AGY CLI execution timed out after 180 seconds.")
+    else:
+        client = get_client(api_key)
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.1
+            )
+        )
+        return response.text or ""
 
 def sanitize_mermaid_code(code: str) -> str:
     """Sanitizes Mermaid.js flowchart syntax by wrapping unquoted node and edge labels in double quotes."""
@@ -210,50 +252,52 @@ def sanitize_mermaid_code(code: str) -> str:
 
     return '\n'.join(sanitized_lines)
 
-def generate_flowchart(strategy_desc: str, api_key: str = None, model: str = "gemini-2.5-flash") -> str:
+def generate_flowchart(
+    strategy_desc: str,
+    api_key: str = None,
+    model: str = "gemini-2.5-flash",
+    provider: str = "agy_cli"
+) -> str:
     """Generates a Mermaid.js flowchart from strategy description."""
-    client = get_client(api_key)
-    
     contents = f"Strategy Description: {strategy_desc}\n\nGenerate the flowchart."
-    
-    response = client.models.generate_content(
-        model=model,
-        contents=contents,
-        config=types.GenerateContentConfig(
-            system_instruction=FLOWCHART_SYSTEM_PROMPT,
-            temperature=0.2
-        )
+    text = call_llm(
+        prompt=contents,
+        system_instruction=FLOWCHART_SYSTEM_PROMPT,
+        provider=provider,
+        api_key=api_key,
+        model=model
     )
     
-    text = response.text
     # Extract mermaid markdown block if present
     match = re.search(r"```mermaid\s+(.*?)\s+```", text, re.DOTALL | re.IGNORECASE)
     raw_code = match.group(1).strip() if match else text.strip()
     return sanitize_mermaid_code(raw_code)
 
-def generate_strategy_code(strategy_desc: str, api_key: str = None, model: str = "gemini-2.5-flash", higher_timeframe: str = None) -> str:
+def generate_strategy_code(
+    strategy_desc: str,
+    api_key: str = None,
+    model: str = "gemini-2.5-flash",
+    higher_timeframe: str = None,
+    provider: str = "agy_cli"
+) -> str:
     """Generates backtesting.py compatible python code from strategy description."""
-    client = get_client(api_key)
-    
     mtf_text = ""
     if higher_timeframe and higher_timeframe.lower() != "none":
         mtf_text = f"\nMulti-Timeframe Mode Enabled: Higher Timeframe is '{higher_timeframe}'. Higher timeframe price columns are available as self.data.Open_htf, self.data.High_htf, self.data.Low_htf, self.data.Close_htf. Use these columns if higher timeframe trend/filtering is needed in the strategy."
         
     contents = f"Strategy Description: {strategy_desc}{mtf_text}\n\nGenerate the backtesting.py strategy Python class."
-    
-    response = client.models.generate_content(
-        model=model,
-        contents=contents,
-        config=types.GenerateContentConfig(
-            system_instruction=STRATEGY_SYSTEM_PROMPT,
-            temperature=0.1
-        )
+    text = call_llm(
+        prompt=contents,
+        system_instruction=STRATEGY_SYSTEM_PROMPT,
+        provider=provider,
+        api_key=api_key,
+        model=model
     )
     
-    text = response.text
     # Extract python markdown block if present
     match = re.search(r"```python\s+(.*?)\s+```", text, re.DOTALL | re.IGNORECASE)
     if match:
         return match.group(1).strip()
     
     return text.strip()
+
