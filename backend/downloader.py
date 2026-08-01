@@ -1,14 +1,11 @@
 import os
 import lzma
 import struct
-import requests
 import datetime
+import asyncio
+import httpx
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
 import numpy as np
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
@@ -23,19 +20,36 @@ TICK_DTYPE = np.dtype([
     ('bid_vol', '>f4')
 ])
 
-def get_http_session() -> requests.Session:
-    """Creates a requests.Session with connection pooling and retry strategy for maximum throughput."""
-    session = requests.Session()
-    adapter = HTTPAdapter(
-        pool_connections=32,
-        pool_maxsize=32,
-        max_retries=Retry(total=2, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
-    )
-    session.mount("https://", adapter)
-    session.mount("http://", adapter)
-    return session
+def run_async(coro):
+    """Runs a coroutine safely in both sync and async environments."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
 
-HTTP_SESSION = get_http_session()
+    if loop and loop.is_running():
+        import threading
+        from concurrent.futures import Future
+
+        res_future = Future()
+
+        def run_in_new_loop():
+            try:
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                res = new_loop.run_until_complete(coro)
+                res_future.set_result(res)
+            except Exception as exc:
+                res_future.set_exception(exc)
+            finally:
+                new_loop.close()
+
+        t = threading.Thread(target=run_in_new_loop)
+        t.start()
+        t.join()
+        return res_future.result()
+    else:
+        return asyncio.run(coro)
 
 def get_point_divider(symbol: str) -> float:
     """Returns the division factor to convert Dukascopy integer price to float."""
@@ -61,19 +75,21 @@ def get_valid_hours_for_date(date: datetime.date) -> list[int]:
         return [21, 22, 23]
     return list(range(24))
 
-def download_hour_ticks(symbol: str, date: datetime.date, hour: int, session: requests.Session = None) -> pd.DataFrame:
+async def async_download_hour_ticks(symbol: str, date: datetime.date, hour: int, client: httpx.AsyncClient = None) -> pd.DataFrame:
     """
     Downloads and parses tick data for a single hour using vectorized NumPy binary parsing.
     Returns a DataFrame with columns ['price', 'volume'] indexed by timestamp.
     """
-    if session is None:
-        session = HTTP_SESSION
-
     duka_month = date.month - 1
     url = f"https://datafeed.dukascopy.com/datafeed/{symbol.upper()}/{date.year}/{duka_month:02d}/{date.day:02d}/{hour:02d}h_ticks.bi5"
     
     try:
-        response = session.get(url, timeout=8)
+        if client is None:
+            async with httpx.AsyncClient(timeout=8.0) as temp_client:
+                response = await temp_client.get(url)
+        else:
+            response = await client.get(url, timeout=8.0)
+            
         if response.status_code == 404:
             return pd.DataFrame(columns=["price", "volume"])
         response.raise_for_status()
@@ -99,13 +115,17 @@ def download_hour_ticks(symbol: str, date: datetime.date, hour: int, session: re
         print(f"Error downloading {url}: {e}")
         return pd.DataFrame(columns=["price", "volume"])
 
+def download_hour_ticks(symbol: str, date: datetime.date, hour: int, session = None) -> pd.DataFrame:
+    """Synchronous wrapper for download_hour_ticks."""
+    return run_async(async_download_hour_ticks(symbol, date, hour))
+
 def is_day_cached(symbol: str, date: datetime.date) -> bool:
     """Checks whether 1-minute OHLCV data for a given day is already cached locally."""
     symbol_dir = os.path.join(DATA_DIR, symbol.upper())
     cache_path = os.path.join(symbol_dir, f"{date.strftime('%Y_%m_%d')}_1m.csv")
     return os.path.exists(cache_path)
 
-def download_and_cache_day(symbol: str, date: datetime.date, session: requests.Session = None) -> pd.DataFrame:
+async def async_download_and_cache_day(symbol: str, date: datetime.date, client: httpx.AsyncClient = None) -> pd.DataFrame:
     """
     Downloads all valid trading hours of tick data for a given day in parallel,
     aggregates it into 1-minute OHLCV candles, and caches it as a CSV.
@@ -127,19 +147,18 @@ def download_and_cache_day(symbol: str, date: datetime.date, session: requests.S
         df_empty = pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
         df_empty.to_csv(cache_path)
         return df_empty
-
-    if session is None:
-        session = HTTP_SESSION
             
     print(f"Downloading data for {symbol} on {date.strftime('%Y-%m-%d')}...")
     
-    hour_dfs = []
-    with ThreadPoolExecutor(max_workers=min(len(valid_hours), 24)) as executor:
-        futures = [executor.submit(download_hour_ticks, symbol, date, h, session) for h in valid_hours]
-        for future in as_completed(futures):
-            df_hour = future.result()
-            if not df_hour.empty:
-                hour_dfs.append(df_hour)
+    if client is None:
+        async with httpx.AsyncClient(limits=httpx.Limits(max_connections=24, max_keepalive_connections=10)) as temp_client:
+            tasks = [async_download_hour_ticks(symbol, date, h, temp_client) for h in valid_hours]
+            hour_dfs = await asyncio.gather(*tasks)
+    else:
+        tasks = [async_download_hour_ticks(symbol, date, h, client) for h in valid_hours]
+        hour_dfs = await asyncio.gather(*tasks)
+        
+    hour_dfs = [df for df in hour_dfs if not df.empty]
             
     if not hour_dfs:
         df_empty = pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
@@ -166,7 +185,11 @@ def download_and_cache_day(symbol: str, date: datetime.date, session: requests.S
     df_1m.to_csv(cache_path)
     return df_1m
 
-def get_ohlcv_data(symbol: str, start_date: datetime.date, end_date: datetime.date, timeframe: str, higher_timeframe: str = None) -> pd.DataFrame:
+def download_and_cache_day(symbol: str, date: datetime.date, session = None) -> pd.DataFrame:
+    """Synchronous wrapper for download_and_cache_day."""
+    return run_async(async_download_and_cache_day(symbol, date))
+
+async def async_get_ohlcv_data(symbol: str, start_date: datetime.date, end_date: datetime.date, timeframe: str, higher_timeframe: str = None) -> pd.DataFrame:
     """
     Retrieves and aggregates OHLCV data for a given range.
     Enforces the 2026 restriction.
@@ -185,20 +208,19 @@ def get_ohlcv_data(symbol: str, start_date: datetime.date, end_date: datetime.da
     delta = end_date - start_date
     total_days = delta.days + 1
     
-    # Download/cache days in parallel (up to 6 days concurrently)
-    daily_results = {}
-    with ThreadPoolExecutor(max_workers=min(total_days, 6)) as executor:
-        futures = {executor.submit(download_and_cache_day, symbol, start_date + datetime.timedelta(days=i)): i for i in range(total_days)}
-        for future in as_completed(futures):
-            idx = futures[future]
-            try:
-                df_day = future.result()
-                if df_day is not None and not df_day.empty:
-                    daily_results[idx] = df_day
-            except Exception as e:
-                print(f"Error downloading day {idx}: {e}")
-
-    daily_dfs = [daily_results[i] for i in sorted(daily_results.keys()) if i in daily_results]
+    # Limit concurrency of daily downloads to 6 to avoid hitting rate limits or overwhelming connection pools
+    sem = asyncio.Semaphore(6)
+    
+    limits = httpx.Limits(max_connections=50, max_keepalive_connections=15)
+    async with httpx.AsyncClient(limits=limits, timeout=10.0) as client:
+        async def sem_download(date):
+            async with sem:
+                return await async_download_and_cache_day(symbol, date, client)
+                
+        tasks = [sem_download(start_date + datetime.timedelta(days=i)) for i in range(total_days)]
+        daily_dfs = await asyncio.gather(*tasks)
+            
+    daily_dfs = [df for df in daily_dfs if df is not None and not df.empty]
             
     if not daily_dfs:
         return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
@@ -251,3 +273,8 @@ def get_ohlcv_data(symbol: str, start_date: datetime.date, end_date: datetime.da
                 df_resampled[col] = df_resampled[col].bfill().ffill()
 
     return df_resampled
+
+def get_ohlcv_data(symbol: str, start_date: datetime.date, end_date: datetime.date, timeframe: str, higher_timeframe: str = None) -> pd.DataFrame:
+    """Synchronous wrapper for get_ohlcv_data."""
+    return run_async(async_get_ohlcv_data(symbol, start_date, end_date, timeframe, higher_timeframe))
+

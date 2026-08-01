@@ -141,15 +141,14 @@ def sanitize_mermaid_code(code: str) -> str:
             sanitized_lines.append(line)
             continue
 
-        # Step A: Protect/quote edge labels |...| so node regex doesn't match inside them
+        # Step A: Protect/clean edge labels |...| so node regex doesn't match inside them
         edge_placeholders = []
         def protect_edge(m):
             label = m.group(1).strip()
-            if not (label.startswith('"') and label.endswith('"')):
-                clean = label.replace('"', '\\"')
-                label = f'"{clean}"'
+            # Strip double quotes and parentheses inside edge labels |...| to prevent Mermaid syntax parse errors
+            clean = label.replace('"', '').replace('(', '').replace(')', '').strip()
             idx = len(edge_placeholders)
-            edge_placeholders.append(f'|{label}|')
+            edge_placeholders.append(f'|{clean}|')
             return f'__EDGE_LABEL_{idx}__'
 
         line_protected = re.sub(r'\|([^|]+)\|', protect_edge, line)
