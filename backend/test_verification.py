@@ -146,26 +146,43 @@ def test_llm_manager():
     mock_flowchart_response = MagicMock()
     mock_flowchart_response.text = "```mermaid\ngraph TD\n    A[Start] --> B[Check SMA]\n```"
     
-    mock_strategy_response = MagicMock()
-    mock_strategy_response.text = "```python\nfrom backtesting import Strategy\nclass GeneratedStrategy(Strategy):\n    pass\n```"
-    
     with patch("llm_manager.genai.Client") as mock_client_cls:
         mock_client_instance = MagicMock()
         mock_client_cls.return_value = mock_client_instance
         
         # Test 1: Flowchart generation parsing
         mock_client_instance.models.generate_content.return_value = mock_flowchart_response
-        flowchart = generate_flowchart("Simple SMA strategy", api_key="dummy_key")
+        flowchart = generate_flowchart("Simple SMA strategy", api_key="dummy_key", provider="gemini_api")
         assert "graph TD" in flowchart, "Flowchart output should contain graph TD"
         assert "```mermaid" not in flowchart, "Mermaid code block delimiters should be stripped"
         
-        # Test 3: Mermaid sanitization of unquoted labels with parentheses
+        # Test 2: Mermaid sanitization of unquoted labels with parentheses
         raw_problematic_chart = "graph TD\n    C -- Yes --> D[Buy (Long)]\n    D --> E{SMA(20) > 50}"
         sanitized = sanitize_mermaid_code(raw_problematic_chart)
         assert 'D["Buy (Long)"]' in sanitized, f"Expected D[\"Buy (Long)\"] in sanitized output, got: {sanitized}"
         assert 'E{"SMA(20) > 50"}' in sanitized, f"Expected E{{\"SMA(20) > 50\"}} in sanitized output, got: {sanitized}"
         
     print("LLM Manager unit tests: SUCCESS")
+
+def test_llm_manager_agy_cli():
+    print("Running AGY CLI Live Strategy Generation Test...")
+    strategy_desc = "Buy long when 10 EMA crosses above 50 EMA with 1% stop loss and 2% take profit."
+    
+    print("Generating flowchart via AGY CLI...")
+    flowchart = generate_flowchart(strategy_desc, provider="agy_cli")
+    print("Generated Flowchart:")
+    print(flowchart)
+    assert "graph" in flowchart or "flowchart" in flowchart, "Flowchart should contain graph or flowchart keyword"
+    
+    print("\nGenerating strategy code via AGY CLI...")
+    code = generate_strategy_code(strategy_desc, provider="agy_cli")
+    print("Generated Python Strategy Code:")
+    print(code)
+    assert "class GeneratedStrategy" in code, "Strategy code should contain GeneratedStrategy class"
+    assert "def init" in code, "Strategy code should contain init method"
+    assert "def next" in code, "Strategy code should contain next method"
+    
+    print("AGY CLI Strategy Generation test: SUCCESS")
 
 if __name__ == "__main__":
     try:
@@ -174,6 +191,8 @@ if __name__ == "__main__":
         test_backtest_runner()
         print("-" * 40)
         test_llm_manager()
+        print("-" * 40)
+        test_llm_manager_agy_cli()
         print("-" * 40)
         print("ALL TESTS PASSED")
     except Exception as e:
