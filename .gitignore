@@ -16,3 +16,6 @@ frontend/dist/
 # IDE
 .vscode/
 .idea/
+
+# Local files
+local_agy_plan.md
