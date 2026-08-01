@@ -45,12 +45,14 @@ class FlowchartRequest(BaseModel):
     strategy_desc: str
     api_key: Optional[str] = None
     model: Optional[str] = "gemini-2.5-flash"
+    provider: Optional[str] = "agy_cli"
 
 class StrategyRequest(BaseModel):
     strategy_desc: str
     api_key: Optional[str] = None
     model: Optional[str] = "gemini-2.5-flash"
     higher_timeframe: Optional[str] = None
+    provider: Optional[str] = "agy_cli"
 
 class BacktestRequest(BaseModel):
     code: str
@@ -137,7 +139,8 @@ def handle_generate_flowchart(req: FlowchartRequest):
         flowchart = generate_flowchart(
             strategy_desc=req.strategy_desc,
             api_key=req.api_key,
-            model=req.model
+            model=req.model,
+            provider=req.provider or "agy_cli"
         )
         return {"flowchart": flowchart}
     except Exception as e:
@@ -154,7 +157,8 @@ def handle_generate_strategy(req: StrategyRequest):
             strategy_desc=req.strategy_desc,
             api_key=req.api_key,
             model=req.model,
-            higher_timeframe=req.higher_timeframe
+            higher_timeframe=req.higher_timeframe,
+            provider=req.provider or "agy_cli"
         )
         return {"code": code}
     except Exception as e:
