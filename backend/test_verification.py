@@ -12,6 +12,9 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from downloader import get_point_divider, download_and_cache_day, get_ohlcv_data
 from backtest_runner import run_backtest_from_code
 
+from unittest.mock import MagicMock, patch
+from llm_manager import generate_flowchart, generate_strategy_code, get_client
+
 def test_downloader_and_parser():
     print("Running Downloader/Parser Test...")
     symbol = "EURUSD"
@@ -137,11 +140,40 @@ class GeneratedStrategy(Strategy):
     assert len(results['equity_curve']) == 100, "Equity curve length should match data"
     print("Backtest runner verification: SUCCESS")
 
+def test_llm_manager():
+    print("Running LLM Manager Unit Tests...")
+    
+    mock_flowchart_response = MagicMock()
+    mock_flowchart_response.text = "```mermaid\ngraph TD\n    A[Start] --> B[Check SMA]\n```"
+    
+    mock_strategy_response = MagicMock()
+    mock_strategy_response.text = "```python\nfrom backtesting import Strategy\nclass GeneratedStrategy(Strategy):\n    pass\n```"
+    
+    with patch("llm_manager.genai.Client") as mock_client_cls:
+        mock_client_instance = MagicMock()
+        mock_client_cls.return_value = mock_client_instance
+        
+        # Test 1: Flowchart generation parsing
+        mock_client_instance.models.generate_content.return_value = mock_flowchart_response
+        flowchart = generate_flowchart("Simple SMA strategy", api_key="dummy_key")
+        assert "graph TD" in flowchart, "Flowchart output should contain graph TD"
+        assert "```mermaid" not in flowchart, "Mermaid code block delimiters should be stripped"
+        
+        # Test 2: Strategy code generation parsing
+        mock_client_instance.models.generate_content.return_value = mock_strategy_response
+        code = generate_strategy_code("Simple SMA strategy", api_key="dummy_key", higher_timeframe="1h")
+        assert "class GeneratedStrategy(Strategy):" in code, "Strategy code should contain GeneratedStrategy"
+        assert "```python" not in code, "Python code block delimiters should be stripped"
+        
+    print("LLM Manager unit tests: SUCCESS")
+
 if __name__ == "__main__":
     try:
         test_downloader_and_parser()
         print("-" * 40)
         test_backtest_runner()
+        print("-" * 40)
+        test_llm_manager()
         print("-" * 40)
         print("ALL TESTS PASSED")
     except Exception as e:
