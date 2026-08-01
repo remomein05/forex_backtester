@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Filter, Download } from 'lucide-react';
 import type { Trade } from '../api';
 
 interface TradeTableProps {
@@ -41,6 +41,32 @@ export const TradeTable: React.FC<TradeTableProps> = ({ trades }) => {
     }
   };
 
+  const handleExportCSV = () => {
+    if (trades.length === 0) return;
+    const headers = ['ID', 'Type', 'Entry Time', 'Entry Price', 'Exit Time', 'Exit Price', 'Duration', 'Return %', 'PnL ($)'];
+    const rows = trades.map(t => [
+      t.id,
+      t.size > 0 ? 'Buy (Long)' : 'Sell (Short)',
+      t.entry_time,
+      t.entry_price,
+      t.exit_time,
+      t.exit_price,
+      `"${t.duration}"`,
+      t.return_pct.toFixed(2),
+      t.pnl.toFixed(2)
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `trade_log_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-glass)', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -49,28 +75,40 @@ export const TradeTable: React.FC<TradeTableProps> = ({ trades }) => {
           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Detailed list of all backtest transaction logs</p>
         </div>
         
-        {/* Outcome Filter */}
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <Filter size={14} style={{ color: 'var(--text-secondary)' }} />
-          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', padding: '2px', borderRadius: '6px' }}>
-            <button
-              onClick={() => { setFilter('all'); setCurrentPage(1); }}
-              style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', border: 'none', background: filter === 'all' ? 'var(--bg-tertiary)' : 'transparent', color: filter === 'all' ? 'var(--text-primary)' : 'var(--text-secondary)', borderRadius: '4px', cursor: 'pointer' }}
-            >
-              All ({trades.length})
-            </button>
-            <button
-              onClick={() => { setFilter('profit'); setCurrentPage(1); }}
-              style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', border: 'none', background: filter === 'profit' ? 'var(--bg-tertiary)' : 'transparent', color: filter === 'profit' ? 'var(--text-primary)' : 'var(--text-secondary)', borderRadius: '4px', cursor: 'pointer' }}
-            >
-              Profitable ({trades.filter(t => t.pnl > 0).length})
-            </button>
-            <button
-              onClick={() => { setFilter('loss'); setCurrentPage(1); }}
-              style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', border: 'none', background: filter === 'loss' ? 'var(--bg-tertiary)' : 'transparent', color: filter === 'loss' ? 'var(--text-primary)' : 'var(--text-secondary)', borderRadius: '4px', cursor: 'pointer' }}
-            >
-              Losses ({trades.filter(t => t.pnl <= 0).length})
-            </button>
+        {/* Outcome Filter & CSV Export */}
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={handleExportCSV}
+            disabled={trades.length === 0}
+            style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', gap: '0.35rem', borderColor: 'var(--accent-cyan)' }}
+            title="Export trade log to CSV"
+          >
+            <Download size={14} style={{ color: 'var(--accent-cyan)' }} /> Export CSV
+          </button>
+
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <Filter size={14} style={{ color: 'var(--text-secondary)' }} />
+            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', padding: '2px', borderRadius: '6px' }}>
+              <button
+                onClick={() => { setFilter('all'); setCurrentPage(1); }}
+                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', border: 'none', background: filter === 'all' ? 'var(--bg-tertiary)' : 'transparent', color: filter === 'all' ? 'var(--text-primary)' : 'var(--text-secondary)', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                All ({trades.length})
+              </button>
+              <button
+                onClick={() => { setFilter('profit'); setCurrentPage(1); }}
+                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', border: 'none', background: filter === 'profit' ? 'var(--bg-tertiary)' : 'transparent', color: filter === 'profit' ? 'var(--text-primary)' : 'var(--text-secondary)', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                Profitable ({trades.filter(t => t.pnl > 0).length})
+              </button>
+              <button
+                onClick={() => { setFilter('loss'); setCurrentPage(1); }}
+                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', border: 'none', background: filter === 'loss' ? 'var(--bg-tertiary)' : 'transparent', color: filter === 'loss' ? 'var(--text-primary)' : 'var(--text-secondary)', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                Losses ({trades.filter(t => t.pnl <= 0).length})
+              </button>
+            </div>
           </div>
         </div>
       </div>
