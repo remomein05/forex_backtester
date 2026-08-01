@@ -4,6 +4,8 @@ import { Play, Sparkles, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 interface StrategyEditorProps {
   strategyDesc: string;
   setStrategyDesc: (desc: string) => void;
+  llmProvider: string;
+  setLlmProvider: (provider: string) => void;
   apiKey: string;
   setApiKey: (key: string) => void;
   selectedModel: string;
@@ -24,6 +26,8 @@ interface StrategyEditorProps {
 export const StrategyEditor: React.FC<StrategyEditorProps> = ({
   strategyDesc,
   setStrategyDesc,
+  llmProvider,
+  setLlmProvider,
   apiKey,
   setApiKey,
   selectedModel,
@@ -51,30 +55,60 @@ export const StrategyEditor: React.FC<StrategyEditorProps> = ({
         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Describe your trading strategy and compile it to code</p>
       </div>
 
-      {/* API Key and Model configuration */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+      {/* Provider, API Key and Model configuration */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
         <div>
-          <label htmlFor="apiKey">Gemini API Key (Optional)</label>
-          <div style={{ position: 'relative' }}>
-            <input
-              id="apiKey"
-              type={showKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Using backend key..."
-              style={{ paddingRight: '2.5rem', fontSize: '0.85rem' }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowKey(!showKey)}
-              style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-            >
-              {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
+          <label htmlFor="llmProvider">LLM Engine</label>
+          <select 
+            id="llmProvider" 
+            value={llmProvider} 
+            onChange={(e) => setLlmProvider(e.target.value)} 
+            style={{ fontSize: '0.85rem' }}
+          >
+            <option value="agy_cli">AGY CLI (Local)</option>
+            <option value="gemini_api">Gemini API Key</option>
+          </select>
         </div>
+
         <div>
-          <label htmlFor="model">Gemini Model</label>
+          <label htmlFor="apiKey">Gemini API Key</label>
+          {llmProvider === 'agy_cli' ? (
+            <div style={{ 
+              fontSize: '0.78rem', 
+              color: 'var(--accent-cyan)', 
+              background: 'rgba(6, 182, 212, 0.1)', 
+              border: '1px solid rgba(6, 182, 212, 0.25)', 
+              padding: '0.45rem 0.6rem', 
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              height: '36px'
+            }}>
+              ⚡ AGY CLI active (No key needed)
+            </div>
+          ) : (
+            <div style={{ position: 'relative' }}>
+              <input
+                id="apiKey"
+                type={showKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Enter GEMINI_API_KEY..."
+                style={{ paddingRight: '2.5rem', fontSize: '0.85rem' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+              >
+                {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label htmlFor="model">Model</label>
           <select id="model" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} style={{ fontSize: '0.85rem' }}>
             <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
             <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
