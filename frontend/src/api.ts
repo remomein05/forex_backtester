@@ -67,14 +67,15 @@ export async function getPairs(): Promise<PairResponse> {
   return res.json();
 }
 
-export async function generateFlowchart(strategyDesc: string, apiKey?: string, model?: string): Promise<FlowchartResponse> {
+export async function generateFlowchart(strategyDesc: string, apiKey?: string, model?: string, provider?: string): Promise<FlowchartResponse> {
   const res = await fetch(`${API_BASE}/generate-flowchart`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ 
       strategy_desc: strategyDesc, 
       api_key: apiKey || undefined,
-      model: model || undefined
+      model: model || undefined,
+      provider: provider || 'agy_cli'
     }),
   });
   if (!res.ok) {
@@ -84,7 +85,7 @@ export async function generateFlowchart(strategyDesc: string, apiKey?: string, m
   return res.json();
 }
 
-export async function generateStrategy(strategyDesc: string, apiKey?: string, model?: string, higherTimeframe?: string): Promise<StrategyResponse> {
+export async function generateStrategy(strategyDesc: string, apiKey?: string, model?: string, higherTimeframe?: string, provider?: string): Promise<StrategyResponse> {
   const res = await fetch(`${API_BASE}/generate-strategy`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -92,7 +93,8 @@ export async function generateStrategy(strategyDesc: string, apiKey?: string, mo
       strategy_desc: strategyDesc, 
       api_key: apiKey || undefined,
       model: model || undefined,
-      higher_timeframe: higherTimeframe || undefined
+      higher_timeframe: higherTimeframe || undefined,
+      provider: provider || 'agy_cli'
     }),
   });
   if (!res.ok) {
