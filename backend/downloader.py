@@ -6,9 +6,36 @@ import datetime
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import numpy as np
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
 SUPPORTED_PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "XAUUSD"]
+
+# Structured NumPy dtype matching Dukascopy 20-byte binary struct (>IIIff)
+TICK_DTYPE = np.dtype([
+    ('ms_offset', '>u4'),
+    ('ask_raw', '>u4'),
+    ('bid_raw', '>u4'),
+    ('ask_vol', '>f4'),
+    ('bid_vol', '>f4')
+])
+
+def get_http_session() -> requests.Session:
+    """Creates a requests.Session with connection pooling and retry strategy for maximum throughput."""
+    session = requests.Session()
+    adapter = HTTPAdapter(
+        pool_connections=32,
+        pool_maxsize=32,
+        max_retries=Retry(total=2, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+    )
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+HTTP_SESSION = get_http_session()
 
 def get_point_divider(symbol: str) -> float:
     """Returns the division factor to convert Dukascopy integer price to float."""
@@ -20,56 +47,43 @@ def get_point_divider(symbol: str) -> float:
     else:
         return 100000.0  # Standard 5-decimal pairs
 
-def download_hour_ticks(symbol: str, date: datetime.date, hour: int) -> list:
+def download_hour_ticks(symbol: str, date: datetime.date, hour: int, session: requests.Session = None) -> pd.DataFrame:
     """
-    Downloads and parses tick data for a single hour.
-    Dukascopy months are 0-indexed in the URL (Jan = 00, Dec = 11).
+    Downloads and parses tick data for a single hour using vectorized NumPy binary parsing.
+    Returns a DataFrame with columns ['price', 'volume'] indexed by timestamp.
     """
-    # 0-indexed month
+    if session is None:
+        session = HTTP_SESSION
+
     duka_month = date.month - 1
     url = f"https://datafeed.dukascopy.com/datafeed/{symbol.upper()}/{date.year}/{duka_month:02d}/{date.day:02d}/{hour:02d}h_ticks.bi5"
     
     try:
-        response = requests.get(url, timeout=10)
+        response = session.get(url, timeout=8)
         if response.status_code == 404:
-            return []  # Weekend or missing data
+            return pd.DataFrame(columns=["price", "volume"])
         response.raise_for_status()
         
-        # Decompress LZMA
         decompressed_data = lzma.decompress(response.content)
-        
-        # Parse 20-byte chunks
-        # Format: >IIIff (big-endian: uint32 ms offset, uint32 ask, uint32 bid, float ask vol, float bid vol)
-        tick_size = 20
-        num_ticks = len(decompressed_data) // tick_size
-        
-        ticks = []
+        if not decompressed_data:
+            return pd.DataFrame(columns=["price", "volume"])
+            
         divider = get_point_divider(symbol)
         
-        # Base datetime for the hour
-        base_dt = datetime.datetime(date.year, date.month, date.day, hour, 0, 0)
+        # Fast vector parsing with NumPy frombuffer
+        raw_ticks = np.frombuffer(decompressed_data, dtype=TICK_DTYPE)
+        if len(raw_ticks) == 0:
+            return pd.DataFrame(columns=["price", "volume"])
+
+        base_dt = pd.Timestamp(date.year, date.month, date.day, hour, 0, 0)
+        timestamps = base_dt + pd.to_timedelta(raw_ticks['ms_offset'], unit='ms')
+        prices = (raw_ticks['ask_raw'].astype(np.float64) + raw_ticks['bid_raw'].astype(np.float64)) / (2.0 * divider)
+        volumes = raw_ticks['ask_vol'] + raw_ticks['bid_vol']
         
-        for i in range(num_ticks):
-            offset = i * tick_size
-            chunk = decompressed_data[offset:offset+tick_size]
-            ms_offset, ask_raw, bid_raw, ask_vol, bid_vol = struct.unpack(">IIIff", chunk)
-            
-            tick_time = base_dt + datetime.timedelta(milliseconds=ms_offset)
-            ask = ask_raw / divider
-            bid = bid_raw / divider
-            price = (ask + bid) / 2.0
-            volume = ask_vol + bid_vol
-            
-            ticks.append({
-                "timestamp": tick_time,
-                "price": price,
-                "volume": volume
-            })
-        return ticks
+        return pd.DataFrame({"price": prices, "volume": volumes}, index=timestamps)
     except Exception as e:
-        # Log error or return empty (e.g. network failure)
         print(f"Error downloading {url}: {e}")
-        return []
+        return pd.DataFrame(columns=["price", "volume"])
 
 def is_day_cached(symbol: str, date: datetime.date) -> bool:
     """Checks whether 1-minute OHLCV data for a given day is already cached locally."""
@@ -77,7 +91,7 @@ def is_day_cached(symbol: str, date: datetime.date) -> bool:
     cache_path = os.path.join(symbol_dir, f"{date.strftime('%Y_%m_%d')}_1m.csv")
     return os.path.exists(cache_path)
 
-def download_and_cache_day(symbol: str, date: datetime.date) -> pd.DataFrame:
+def download_and_cache_day(symbol: str, date: datetime.date, session: requests.Session = None) -> pd.DataFrame:
     """
     Downloads all 24 hours of tick data for a given day in parallel,
     aggregates it into 1-minute OHLCV candles, and caches it as a CSV.
@@ -93,25 +107,34 @@ def download_and_cache_day(symbol: str, date: datetime.date) -> pd.DataFrame:
             return df
         except Exception as e:
             print(f"Failed to read cache {cache_path}, re-downloading: {e}")
+
+    # Saturday is fully closed in Forex market
+    if date.weekday() == 5:
+        df_empty = pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
+        df_empty.to_csv(cache_path)
+        return df_empty
+
+    if session is None:
+        session = HTTP_SESSION
             
     print(f"Downloading data for {symbol} on {date.strftime('%Y-%m-%d')}...")
     
-    all_ticks = []
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {executor.submit(download_hour_ticks, symbol, date, h): h for h in range(24)}
+    hour_dfs = []
+    with ThreadPoolExecutor(max_workers=24) as executor:
+        futures = [executor.submit(download_hour_ticks, symbol, date, h, session) for h in range(24)]
         for future in as_completed(futures):
-            hour_ticks = future.result()
-            all_ticks.extend(hour_ticks)
+            df_hour = future.result()
+            if not df_hour.empty:
+                hour_dfs.append(df_hour)
             
-    if not all_ticks:
+    if not hour_dfs:
         # Save empty file to signify weekend/no data and avoid re-download attempts
         df_empty = pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
         df_empty.to_csv(cache_path)
         return df_empty
         
     # Convert to DataFrame
-    df_ticks = pd.DataFrame(all_ticks)
-    df_ticks.set_index("timestamp", inplace=True)
+    df_ticks = pd.concat(hour_dfs)
     df_ticks.sort_index(inplace=True)
     
     # Resample to 1-minute candles
