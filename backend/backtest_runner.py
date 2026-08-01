@@ -21,25 +21,117 @@ def clean_value(val):
     else:
         return str(val)
 
+import re
+
+def sanitize_strategy_code(code_str: str) -> str:
+    """
+    Sanitizes strategy code by:
+    1. Removing markdown fences.
+    2. Converting local indicator assignments in init() (e.g., `sma = self.I(...)`) to instance attributes (`self.sma = self.I(...)`).
+    3. Updating un-prefixed references to registered indicators in next() (e.g. `sma[-1]` -> `self.sma[-1]`).
+    """
+    if not code_str:
+        return code_str
+
+    code = re.sub(r'```python\s*', '', code_str, flags=re.IGNORECASE)
+    code = re.sub(r'```\s*', '', code).strip()
+
+    # 1. Convert local indicator assignments in init() to self.<var>
+    def fix_init_assignment(match):
+        indent = match.group(1)
+        var_name = match.group(2)
+        rest = match.group(3)
+        if var_name.startswith('self.'):
+            return match.group(0)
+        return f'{indent}self.{var_name} = {rest}'
+
+    code = re.sub(
+        r'(\n[ \t]+)([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(self\.I\s*\()',
+        fix_init_assignment,
+        code
+    )
+
+    # 2. Identify all self.<attr> defined with self.I
+    defined_attrs = set(re.findall(r'self\.([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*self\.I', code))
+
+    # 3. Replace un-prefixed references to those attributes in indexing or crossover calls
+    for attr in defined_attrs:
+        pattern_bracket = r'(?<![\w\.])' + re.escape(attr) + r'(\s*\[)'
+        code = re.sub(pattern_bracket, r'self.' + attr + r'\1', code)
+
+        pattern_cross1 = r'(\bcrossover\(\s*)' + re.escape(attr) + r'(\s*,)'
+        code = re.sub(pattern_cross1, r'\1self.' + attr + r'\2', code)
+        pattern_cross2 = r'(\bcrossover\([^,]+,\s*)' + re.escape(attr) + r'(\s*\))'
+        code = re.sub(pattern_cross2, r'\1self.' + attr + r'\2', code)
+
+    return code
+
+
 def run_backtest_from_code(code_str: str, df: pd.DataFrame, cash: float = 10000.0, commission: float = 0.0002) -> dict:
     """
     Executes generated strategy code dynamically and runs a backtest on df.
     """
-    # Create execution namespace
+    # Preprocess/sanitize generated strategy code
+    code_str = sanitize_strategy_code(code_str)
+
+    # Expose helper indicators that the LLM may reference
+    def SMA(array, n):
+        return pd.Series(array).rolling(n).mean()
+
+    def EMA(array, n):
+        return pd.Series(array).ewm(span=n, adjust=False).mean()
+
+    def RSI(array, period=14):
+        delta = pd.Series(array).diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / (loss + 1e-9)
+        return 100 - (100 / (1 + rs))
+
+    def ATR(high, low, close, period=14):
+        h, l, c = pd.Series(high), pd.Series(low), pd.Series(close)
+        tr1 = h - l
+        tr2 = (h - c.shift()).abs()
+        tr3 = (l - c.shift()).abs()
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        return tr.rolling(period).mean()
+
+    def STD(array, n):
+        return pd.Series(array).rolling(n).std()
+
+    def MACD(close, fast=12, slow=26, signal=9):
+        c = pd.Series(close)
+        fast_ema = c.ewm(span=fast, adjust=False).mean()
+        slow_ema = c.ewm(span=slow, adjust=False).mean()
+        macd_line = fast_ema - slow_ema
+        signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+        return macd_line, signal_line
+
+    from backtesting.lib import crossover
+
     exec_globals = {
         "__builtins__": __builtins__,
         "pd": pd,
         "np": np,
         "Strategy": Strategy,
         "backtesting": backtesting,
+        "crossover": crossover,
+        "SMA": SMA,
+        "sma": SMA,
+        "EMA": EMA,
+        "ema": EMA,
+        "RSI": RSI,
+        "rsi": RSI,
+        "ATR": ATR,
+        "atr": ATR,
+        "STD": STD,
+        "std": STD,
+        "MACD": MACD,
+        "macd": MACD,
     }
-    
-    # Also expose helper functions or crossovers if model didn't import them
-    from backtesting.lib import crossover
-    exec_globals["crossover"] = crossover
-    
+
     local_vars = {}
-    
+
     try:
         # Dynamically execute code
         exec(code_str, exec_globals, local_vars)

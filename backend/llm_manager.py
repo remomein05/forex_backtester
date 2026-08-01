@@ -10,41 +10,28 @@ load_dotenv()
 # Common indicator helper functions to supply to the model
 INDICATOR_HELPERS = """
 ---
-Available indicator calculations (copy or use as reference for self.I):
+Available indicator calculations (MUST assign to self.<indicator_name> inside self.I):
 1. SMA:
-   self.sma = self.I(lambda: pd.Series(self.data.Close).rolling(window=20).mean())
+   self.sma = self.I(SMA, self.data.Close, 20)
 
 2. EMA:
-   self.ema = self.I(lambda: pd.Series(self.data.Close).ewm(span=20, adjust=False).mean())
+   self.ema = self.I(EMA, self.data.Close, 20)
 
 3. RSI:
-   def calculate_rsi(close, period=14):
-       delta = pd.Series(close).diff()
-       gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-       loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-       rs = gain / (loss + 1e-9)
-       return 100 - (100 / (1 + rs))
-   self.rsi = self.I(calculate_rsi, self.data.Close, 14)
+   self.rsi = self.I(RSI, self.data.Close, 14)
 
 4. ATR (Average True Range):
-   def calculate_atr(high, low, close, period=14):
-       h, l, c = pd.Series(high), pd.Series(low), pd.Series(close)
-       tr1 = h - l
-       tr2 = (h - c.shift()).abs()
-       tr3 = (l - c.shift()).abs()
-       tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-       return tr.rolling(period).mean()
-   self.atr = self.I(calculate_atr, self.data.High, self.data.Low, self.data.Close, 14)
+   self.atr = self.I(ATR, self.data.High, self.data.Low, self.data.Close, 14)
 
 5. Bollinger Bands:
    def bb_upper(close, period=20, num_std=2):
-       sma = pd.Series(close).rolling(window=period).mean()
-       std = pd.Series(close).rolling(window=period).std()
-       return sma + (std * num_std)
+       sma_val = pd.Series(close).rolling(window=period).mean()
+       std_val = pd.Series(close).rolling(window=period).std()
+       return sma_val + (std_val * num_std)
    def bb_lower(close, period=20, num_std=2):
-       sma = pd.Series(close).rolling(window=period).mean()
-       std = pd.Series(close).rolling(window=period).std()
-       return sma - (std * num_std)
+       sma_val = pd.Series(close).rolling(window=period).mean()
+       std_val = pd.Series(close).rolling(window=period).std()
+       return sma_val - (std_val * num_std)
    self.bb_up = self.I(bb_upper, self.data.Close, 20, 2)
    self.bb_low = self.I(bb_lower, self.data.Close, 20, 2)
 ---
@@ -85,11 +72,13 @@ class GeneratedStrategy(Strategy):
     
     def init(self):
         # Register indicators with self.I.
-        # Do not use ta-lib. Use inline custom lambdas or local functions.
+        # CRITICAL: Always assign indicators to self attributes! e.g. self.sma = self.I(SMA, self.data.Close, 20)
+        # NEVER assign them to local variables like `sma = self.I(...)`!
         pass
         
     def next(self):
         # Core trade logic.
+        # CRITICAL: Always access indicators via self attributes! e.g. self.sma[-1] or crossover(self.sma_fast, self.sma_slow)
         # self.buy() to enter long, self.sell() to enter short.
         # self.position.close() to exit existing trade.
         # Note: self.data.Close[-1] is the current candle's close price, self.data.Close[-2] is the previous one.
@@ -110,6 +99,7 @@ Guidelines:
    - For long: `sl = self.data.Close[-1] * (1 - 0.02)` (e.g. 2% stop).
    - For short: `sl = self.data.Close[-1] * (1 + 0.02)`.
 5. Ensure all data accesses are correct. `self.data.Close` is a series; access the current element as `self.data.Close[-1]`.
+6. Built-in functions `SMA`, `EMA`, `RSI`, `ATR` are automatically available in context.
 
 {INDICATOR_HELPERS}
 """
