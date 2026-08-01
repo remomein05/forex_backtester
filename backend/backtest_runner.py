@@ -8,15 +8,17 @@ from backtesting import Backtest, Strategy
 
 def clean_value(val):
     """Converts numpy types and NaNs/Infs to JSON-serializable types."""
-    if isinstance(val, (np.integer, np.int64, np.int32)):
+    if val is None:
+        return None
+    elif isinstance(val, (np.integer, np.int64, np.int32)):
         return int(val)
-    elif isinstance(val, (np.floating, np.float64, np.float32)):
+    elif isinstance(val, (float, np.floating, np.float64, np.float32)):
         if math.isnan(val) or math.isinf(val):
             return None
         return float(val)
     elif isinstance(val, pd.Timestamp):
         return val.isoformat()
-    elif isinstance(val, datetime_type_check := (type(None), str, bool, int, float, list, dict)):
+    elif isinstance(val, (str, bool, int, list, dict)):
         return val
     else:
         return str(val)

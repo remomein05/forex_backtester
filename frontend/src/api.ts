@@ -61,9 +61,26 @@ export interface DownloadProgress {
 
 const API_BASE = '/api';
 
+async function parseErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const text = await res.text();
+    try {
+      const json = JSON.parse(text);
+      return json.detail || json.message || fallback;
+    } catch {
+      return text || fallback;
+    }
+  } catch {
+    return fallback;
+  }
+}
+
 export async function getPairs(): Promise<PairResponse> {
   const res = await fetch(`${API_BASE}/pairs`);
-  if (!res.ok) throw new Error('Failed to fetch currency pairs.');
+  if (!res.ok) {
+    const msg = await parseErrorMessage(res, 'Failed to fetch currency pairs.');
+    throw new Error(msg);
+  }
   return res.json();
 }
 
@@ -79,8 +96,8 @@ export async function generateFlowchart(strategyDesc: string, apiKey?: string, m
     }),
   });
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || 'Failed to generate flowchart.');
+    const msg = await parseErrorMessage(res, 'Failed to generate flowchart.');
+    throw new Error(msg);
   }
   return res.json();
 }
@@ -98,8 +115,8 @@ export async function generateStrategy(strategyDesc: string, apiKey?: string, mo
     }),
   });
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || 'Failed to generate strategy code.');
+    const msg = await parseErrorMessage(res, 'Failed to generate strategy code.');
+    throw new Error(msg);
   }
   return res.json();
 }
@@ -129,8 +146,8 @@ export async function runBacktest(
     }),
   });
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || 'Backtest failed.');
+    const msg = await parseErrorMessage(res, 'Backtest failed.');
+    throw new Error(msg);
   }
   return res.json();
 }
