@@ -2,14 +2,10 @@ import React, { useState } from 'react';
 import { Database, Download, CheckCircle, RefreshCw } from 'lucide-react';
 
 export interface DownloadInfo {
-  currentDay: number;
-  totalDays: number;
-  currentDate: string;
-  isCached: boolean;
   candleCount: number;
-  totalCandles: number;
+  dateFrom: string;
+  dateTo: string;
   elapsedSeconds: number;
-  etaSeconds: number | null;
 }
 
 interface ControlPanelProps {
@@ -160,27 +156,23 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         </div>
       </div>
 
-      {/* Date Range (Strictly limited to 2026) */}
+      {/* Date Range */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         <div>
-          <label htmlFor="startDate">Start Date (2026 Only)</label>
+          <label htmlFor="startDate">Start Date</label>
           <input
             id="startDate"
             type="date"
-            min="2026-01-01"
-            max="2026-12-31"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             style={{ fontSize: '0.85rem' }}
           />
         </div>
         <div>
-          <label htmlFor="endDate">End Date (2026 Only)</label>
+          <label htmlFor="endDate">End Date</label>
           <input
             id="endDate"
             type="date"
-            min="2026-01-01"
-            max="2026-12-31"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             style={{ fontSize: '0.85rem' }}
@@ -233,9 +225,9 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         </button>
 
         {isDownloading && (
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
             gap: '0.6rem',
             background: 'var(--bg-secondary)',
             border: '1px solid var(--border-glass)',
@@ -245,7 +237,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             {/* Header: Label & % */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', fontWeight: 600 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-cyan)' }}>
-                <RefreshCw className="pulse" size={14} /> Fetching Tick Data
+                <RefreshCw className="pulse" size={14} /> Fetching Bar Data
               </span>
               <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
                 {downloadProgress}%
@@ -254,62 +246,39 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 
             {/* Progress Bar */}
             <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden' }}>
-              <div 
-                style={{ 
-                  width: `${downloadProgress}%`, 
-                  height: '100%', 
+              <div
+                style={{
+                  width: `${downloadProgress}%`,
+                  height: '100%',
                   background: 'linear-gradient(90deg, var(--accent-cyan), var(--accent-purple))',
                   transition: 'width 0.3s ease-out'
                 }}
               />
             </div>
 
-            {/* Detailed Metrics Grid */}
-            {downloadInfo && downloadInfo.totalDays > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.2rem', fontSize: '0.75rem' }}>
-                
-                {/* Day Counter & Status Pill */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>
-                    Day <strong style={{ color: 'var(--text-primary)' }}>{downloadInfo.currentDay}</strong> of <strong>{downloadInfo.totalDays}</strong>
-                    {downloadInfo.currentDate && ` (${downloadInfo.currentDate})`}
+            {/* Candle count & date range once available */}
+            {downloadInfo && downloadInfo.candleCount > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>M1 Bars Downloaded</span>
+                  <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
+                    {downloadInfo.candleCount.toLocaleString()}
                   </span>
-                  {downloadInfo.isCached ? (
-                    <span style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 500 }}>
-                      ⚡ Cached
-                    </span>
-                  ) : (
-                    <span style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#a855f7', border: '1px solid rgba(168, 85, 247, 0.3)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 500 }}>
-                      🌐 Downloading bi5
-                    </span>
-                  )}
                 </div>
-
-                {/* Timers: Elapsed & ETA */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.4rem 0.5rem', borderRadius: '6px' }}>
-                  <div>
-                    <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.7rem' }}>Elapsed Time</span>
-                    <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontWeight: 600 }}>
-                      {formatSeconds(downloadInfo.elapsedSeconds)}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.7rem' }}>Est. Remaining</span>
-                    <span style={{ color: 'var(--accent-cyan)', fontFamily: 'monospace', fontWeight: 600 }}>
-                      {downloadInfo.etaSeconds !== null ? `~${formatSeconds(downloadInfo.etaSeconds)}` : 'Calculating...'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Candles fetched count */}
-                {downloadInfo.totalCandles > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
-                    <span>Processed OHLCV</span>
-                    <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
-                      {downloadInfo.totalCandles.toLocaleString()} candles
+                {downloadInfo.dateFrom && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Date Range</span>
+                    <span style={{ color: 'var(--accent-cyan)', fontFamily: 'monospace' }}>
+                      {downloadInfo.dateFrom} &rarr; {downloadInfo.dateTo}
                     </span>
                   </div>
                 )}
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Elapsed</span>
+                  <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
+                    {formatSeconds(downloadInfo.elapsedSeconds)}
+                  </span>
+                </div>
               </div>
             )}
 

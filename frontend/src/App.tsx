@@ -119,14 +119,10 @@ export const App: React.FC = () => {
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [downloadStatus, setDownloadStatus] = useState<string>('');
   const [downloadInfo, setDownloadInfo] = useState<DownloadInfo>({
-    currentDay: 0,
-    totalDays: 0,
-    currentDate: '',
-    isCached: false,
     candleCount: 0,
-    totalCandles: 0,
-    elapsedSeconds: 0,
-    etaSeconds: null
+    dateFrom: '',
+    dateTo: '',
+    elapsedSeconds: 0
   });
   const [isDataReady, setIsDataReady] = useState<boolean>(false);
   
@@ -149,20 +145,16 @@ export const App: React.FC = () => {
       });
   }, []);
 
-  // Action: Download price data from Dukascopy
+  // Action: Download price data from ForexSB
   const handleDownloadData = async () => {
     setIsDownloading(true);
     setDownloadProgress(0);
     setDownloadStatus('Starting download...');
     setDownloadInfo({
-      currentDay: 0,
-      totalDays: 0,
-      currentDate: '',
-      isCached: false,
       candleCount: 0,
-      totalCandles: 0,
-      elapsedSeconds: 0,
-      etaSeconds: null
+      dateFrom: '',
+      dateTo: '',
+      elapsedSeconds: 0
     });
     setError(null);
 
@@ -177,17 +169,14 @@ export const App: React.FC = () => {
     try {
       await downloadData(selectedPair, startDate, endDate, (prog: any) => {
         setDownloadProgress(prog.progress || 0);
-        if (prog.message) setDownloadStatus(prog.message || prog.status);
-        
-        if (prog.current_day !== undefined && prog.total_days !== undefined) {
+        if (prog.message) setDownloadStatus(prog.message);
+
+        if (prog.candle_count !== undefined) {
           setDownloadInfo(prev => ({
             ...prev,
-            currentDay: prog.current_day || prev.currentDay,
-            totalDays: prog.total_days || prev.totalDays,
-            currentDate: prog.date || prev.currentDate,
-            isCached: prog.is_cached ?? prev.isCached,
             candleCount: prog.candle_count || 0,
-            totalCandles: prev.totalCandles + (prog.candle_count || 0)
+            dateFrom: prog.date_from || prev.dateFrom,
+            dateTo: prog.date_to || prev.dateTo
           }));
         }
       });
@@ -334,7 +323,7 @@ export const App: React.FC = () => {
               Forex Strategy Backtester & Compiler
             </h1>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0 }}>
-              AI-Powered Strategy Compilation with Dukascopy Tick Precision
+              AI-Powered Strategy Compiler · Powered by ForexSB Bar Data
             </p>
           </div>
         </div>
@@ -467,13 +456,13 @@ export const App: React.FC = () => {
                 </h3>
                 <ol style={{ paddingLeft: '1.2rem', margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <li>
-                    <strong style={{ color: '#f8fafc' }}>Home Tab (Backtester Config):</strong> Select currency pair, date range (clamped to 2026), timeframe, and click <em>Download Tick Data</em>.
+                    <strong style={{ color: '#f8fafc' }}>Home Tab (Backtester Config):</strong> Select currency pair, date range, timeframe, and click <em>Fetch Price Data</em> to download bar data from ForexSB.
                   </li>
                   <li>
                     <strong style={{ color: '#f8fafc' }}>Strategy Tab (Workspace):</strong> Describe your forex trading logic in plain English, select model runtime, generate & verify the flowchart, then generate Python code.
                   </li>
                   <li>
-                    <strong style={{ color: '#f8fafc' }}>Backtest Tab:</strong> Click <em>Execute Backtest</em> to compile the strategy against historical tick data, inspect net return, win rate, and drawdown.
+                    <strong style={{ color: '#f8fafc' }}>Backtest Tab:</strong> Click <em>Execute Backtest</em> to run the strategy against historical bar data, inspect net return, win rate, and drawdown.
                   </li>
                   <li>
                     <strong style={{ color: '#f8fafc' }}>Chart Tab:</strong> Analyze entry markers, Stop Loss (SL) levels, and Take Profit (TP) levels visually on the price chart.
@@ -504,9 +493,9 @@ export const App: React.FC = () => {
                     <span style={{ color: '#34d399', fontWeight: 600 }}>${cash.toLocaleString()}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Tick Data Feed:</span>
+                    <span style={{ color: 'var(--text-muted)' }}>Price Data Feed:</span>
                     <span style={{ color: isDataReady ? '#34d399' : '#fbbf24' }}>
-                      {isDataReady ? '✓ Loaded' : 'Pending Download'}
+                      {isDataReady ? '✓ Loaded (ForexSB)' : 'Pending Download'}
                     </span>
                   </div>
                 </div>
