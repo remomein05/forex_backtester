@@ -19,7 +19,8 @@ import {
   generateFlowchart, 
   generateStrategy, 
   runBacktest, 
-  downloadData 
+  downloadData,
+  saveStrategy
 } from './api';
 import type { 
   BacktestResponse,
@@ -61,11 +62,40 @@ export const App: React.FC = () => {
   const [llmProvider, setLlmProvider] = useState<string>('agy_cli');
   const [apiKey, setApiKey] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3.1-pro');
+
+  // Strategy Cache tracking state
+  const [activeStrategyId, setActiveStrategyId] = useState<string | null>(null);
+  const [activeStrategyName, setActiveStrategyName] = useState<string | null>(null);
+  const [lastGeneratedDesc, setLastGeneratedDesc] = useState<string>('');
   
   // Generation & Verification pipeline states
   const [flowchartCode, setFlowchartCode] = useState<string>('');
   const [isFlowchartVerified, setIsFlowchartVerified] = useState<boolean>(false);
   const [generatedCode, setGeneratedCode] = useState<string>('');
+
+  // Auto-save generated flowchart and python code to disk cache
+  const autoSaveCurrentStrategy = async (flowchart: string, code: string) => {
+    if (!strategyDesc.trim()) return;
+    try {
+      const payload: SavedStrategy = {
+        id: activeStrategyId || undefined,
+        name: activeStrategyName || (strategyDesc.trim().slice(0, 30) + ' Strategy'),
+        description: strategyDesc.trim(),
+        flowchart_code: flowchart,
+        python_code: code,
+        symbol: selectedPair,
+        timeframe: timeframe,
+        higher_timeframe: higherTimeframe
+      };
+      const res = await saveStrategy(payload);
+      if (res?.strategy?.id) {
+        setActiveStrategyId(res.strategy.id);
+        setActiveStrategyName(res.strategy.name);
+      }
+    } catch (e) {
+      console.warn('Auto-save strategy cache warning:', e);
+    }
+  };
   
   // Backtest results
   const [backtestResults, setBacktestResults] = useState<BacktestResponse | null>(null);
@@ -109,11 +139,7 @@ export const App: React.FC = () => {
   const handleDownloadData = async () => {
     setIsDownloading(true);
     setDownloadProgress(0);
-    setDownloadStatus('Connecting to Dukascopy feed...');
-    setIsDataReady(false);
-    setError(null);
-
-    const startTime = Date.now();
+    setDownloadStatus('Starting download...');
     setDownloadInfo({
       currentDay: 0,
       totalDays: 0,
@@ -124,29 +150,21 @@ export const App: React.FC = () => {
       elapsedSeconds: 0,
       etaSeconds: null
     });
+    setError(null);
 
+    const startTime = Date.now();
     const timer = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      setDownloadInfo(prev => {
-        let eta: number | null = null;
-        if (prev.totalDays > 0 && prev.currentDay > 0 && prev.currentDay < prev.totalDays) {
-          const remainingDays = prev.totalDays - prev.currentDay;
-          const secPerDay = elapsed / prev.currentDay;
-          eta = Math.max(1, Math.round(remainingDays * secPerDay));
-        }
-        return {
-          ...prev,
-          elapsedSeconds: elapsed,
-          etaSeconds: eta
-        };
-      });
+      setDownloadInfo(prev => ({
+        ...prev,
+        elapsedSeconds: Math.floor((Date.now() - startTime) / 1000)
+      }));
     }, 1000);
 
     try {
-      await downloadData(selectedPair, startDate, endDate, (prog) => {
-        setDownloadProgress(prog.progress);
-        setDownloadStatus(prog.message || prog.status);
-
+      await downloadData(selectedPair, startDate, endDate, (prog: any) => {
+        setDownloadProgress(prog.progress || 0);
+        if (prog.message) setDownloadStatus(prog.message || prog.status);
+        
         if (prog.current_day !== undefined && prog.total_days !== undefined) {
           setDownloadInfo(prev => ({
             ...prev,
@@ -169,17 +187,24 @@ export const App: React.FC = () => {
     }
   };
 
-  // Action: Generate Mermaid flowchart
-  const handleGenerateFlowchart = async () => {
+  // Action: Generate Mermaid flowchart (Uses Cache if unedited, bypasses LLM call)
+  const handleGenerateFlowchart = async (forceRegenerate: boolean = false) => {
+    // If flowchart already exists and strategy description has NOT been edited, load from cache without LLM call!
+    if (!forceRegenerate && flowchartCode && strategyDesc.trim() === lastGeneratedDesc.trim()) {
+      setIsFlowchartVerified(true);
+      return;
+    }
+
     setIsFlowchartLoading(true);
     setIsFlowchartVerified(false);
-    setGeneratedCode('');
-    setFlowchartCode('');
     setError(null);
 
     try {
       const res = await generateFlowchart(strategyDesc, apiKey || undefined, selectedModel, llmProvider);
       setFlowchartCode(res.flowchart);
+      setLastGeneratedDesc(strategyDesc.trim());
+      // Auto-save generated flowchart to strategy cache
+      await autoSaveCurrentStrategy(res.flowchart, generatedCode);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Flowchart generation failed.');
@@ -188,20 +213,27 @@ export const App: React.FC = () => {
     }
   };
 
-  // Action: Generate Python Strategy Code
-  const handleGenerateStrategyCode = async () => {
+  // Action: Generate Python Strategy Code (Uses Cache if unedited, bypasses LLM call)
+  const handleGenerateStrategyCode = async (forceRegenerate: boolean = false) => {
     if (!isFlowchartVerified) {
       setError('You must confirm the strategy flowchart before writing code.');
       return;
     }
+
+    // If python code already exists and strategy description has NOT been edited, load from cache without LLM call!
+    if (!forceRegenerate && generatedCode && strategyDesc.trim() === lastGeneratedDesc.trim()) {
+      return;
+    }
     
     setIsCodeLoading(true);
-    setGeneratedCode('');
     setError(null);
 
     try {
       const res = await generateStrategy(strategyDesc, apiKey || undefined, selectedModel, higherTimeframe, llmProvider);
       setGeneratedCode(res.code);
+      setLastGeneratedDesc(strategyDesc.trim());
+      // Auto-save generated python code to strategy cache
+      await autoSaveCurrentStrategy(flowchartCode, res.code);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Strategy code generation failed.');
@@ -247,7 +279,12 @@ export const App: React.FC = () => {
   };
 
   const handleLoadStrategy = (strat: SavedStrategy) => {
-    if (strat.description) setStrategyDesc(strat.description);
+    if (strat.id) setActiveStrategyId(strat.id);
+    if (strat.name) setActiveStrategyName(strat.name);
+    const desc = strat.description || '';
+    setStrategyDesc(desc);
+    setLastGeneratedDesc(desc);
+
     if (strat.flowchart_code) {
       setFlowchartCode(strat.flowchart_code);
       setIsFlowchartVerified(true);
