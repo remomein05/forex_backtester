@@ -15,6 +15,7 @@ interface StrategyEditorProps {
   setSelectedModel: (model: string) => void;
   flowchartCode: string;
   isFlowchartVerified: boolean;
+  setIsFlowchartVerified?: (verified: boolean) => void;
   generatedCode: string;
   setGeneratedCode: (code: string) => void;
   onGenerateFlowchart: () => void;
@@ -38,6 +39,7 @@ export const StrategyEditor: React.FC<StrategyEditorProps> = ({
   setSelectedModel,
   flowchartCode,
   isFlowchartVerified,
+  setIsFlowchartVerified,
   generatedCode,
   setGeneratedCode,
   onGenerateFlowchart,
@@ -385,7 +387,12 @@ export const StrategyEditor: React.FC<StrategyEditorProps> = ({
           id="strategyDesc"
           rows={6}
           value={strategyDesc}
-          onChange={(e) => setStrategyDesc(e.target.value)}
+          onChange={(e) => {
+            setStrategyDesc(e.target.value);
+            if (isFlowchartVerified && setIsFlowchartVerified) {
+              setIsFlowchartVerified(false);
+            }
+          }}
           placeholder="Example: Buy long when the 10-period EMA crosses above the 20-period EMA and the RSI is below 40. Set a Stop Loss at 1.5% below entry price, and a Take Profit at 3% above entry price. Exit long if the 10 EMA crosses back below the 20 EMA."
           style={{ width: '100%', resize: 'vertical', fontSize: '0.9rem', lineHeight: '1.4', fontFamily: 'inherit' }}
         />

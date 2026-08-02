@@ -487,6 +487,7 @@ export const App: React.FC = () => {
               setSelectedModel={setSelectedModel}
               flowchartCode={flowchartCode}
               isFlowchartVerified={isFlowchartVerified}
+              setIsFlowchartVerified={setIsFlowchartVerified}
               generatedCode={generatedCode}
               setGeneratedCode={setGeneratedCode}
               onGenerateFlowchart={handleGenerateFlowchart}
