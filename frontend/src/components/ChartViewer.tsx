@@ -42,7 +42,7 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
   useEffect(() => {
     if (candles && candles.length > 0) {
       setRange({
-        start: Math.max(0, candles.length - 100),
+        start: 0,
         end: candles.length - 1
       });
     }
@@ -71,8 +71,8 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
         const cleanEntryTime = t.entry_time.replace('T', ' ').slice(0, 13);
         const entryIdx = candles.findIndex(c => c.time.replace('T', ' ').startsWith(cleanEntryTime));
         if (entryIdx !== -1) {
-          const span = 80;
-          const start = Math.max(0, entryIdx - 20);
+          const span = 100;
+          const start = Math.max(0, entryIdx - 30);
           const end = Math.min(candles.length - 1, start + span - 1);
           setRange({ start, end });
         }
@@ -112,11 +112,11 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
     setRange({ start: newStart, end: newEnd });
   };
 
-  // Reset View Handler
+  // Reset View Handler: Show all candles from left edge to right edge
   const handleResetView = () => {
     if (!candles || candles.length === 0) return;
     setRange({
-      start: Math.max(0, candles.length - 100),
+      start: 0,
       end: candles.length - 1
     });
     setSelectedTradeId('all');
