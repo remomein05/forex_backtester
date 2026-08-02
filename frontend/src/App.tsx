@@ -554,16 +554,6 @@ export const App: React.FC = () => {
                 >
                   <Code size={14} /> {backtestSubView === 'code' ? 'Hide Python Code' : 'View Python Code'}
                 </button>
-
-                {/* Execute Backtest Primary Action Button */}
-                <button
-                  onClick={handleRunBacktest}
-                  disabled={isBacktestRunning || !generatedCode.trim() || !isDataReady}
-                  className="btn btn-primary"
-                  style={{ fontSize: '0.85rem', padding: '0.5rem 1.25rem', gap: '0.4rem' }}
-                >
-                  <Play size={16} /> {isBacktestRunning ? 'Executing Backtest...' : 'Execute Backtest'}
-                </button>
               </div>
             </div>
 

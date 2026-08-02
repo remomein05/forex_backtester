@@ -3,11 +3,13 @@ import {
   ResponsiveContainer, 
   ComposedChart, 
   Line, 
+  Bar,
   XAxis, 
   YAxis, 
   Tooltip, 
   CartesianGrid, 
-  ReferenceLine 
+  ReferenceLine,
+  ReferenceDot
 } from 'recharts';
 import { CandlestickChart, TrendingUp, ArrowUpCircle, ArrowDownCircle, Shield, Target } from 'lucide-react';
 import type { Trade, CandlePoint } from '../api';
@@ -19,6 +21,48 @@ interface ChartViewerProps {
   timeframe: string;
 }
 
+// Custom SVG Candlestick renderer for Recharts
+const CustomCandlestickShape = (props: any) => {
+  const { x, width, payload, yAxis } = props;
+  if (!payload || !yAxis) return null;
+
+  const { open, high, low, close } = payload;
+  if (open == null || close == null || high == null || low == null) return null;
+
+  const isUp = close >= open;
+  const color = isUp ? '#10b981' : '#f43f5e';
+
+  // Convert prices to pixel coordinates using Y-Axis scale
+  const openY = yAxis.scale(open);
+  const closeY = yAxis.scale(close);
+  const highY = yAxis.scale(high);
+  const lowY = yAxis.scale(low);
+
+  const candleTop = Math.min(openY, closeY);
+  const candleHeight = Math.max(2, Math.abs(openY - closeY));
+  const barWidth = Math.max(3, Math.min(width ? width * 0.75 : 6, 12));
+  const candleX = x + (width ? (width - barWidth) / 2 : 0);
+  const wickX = x + (width ? width / 2 : 3);
+
+  return (
+    <g className="candlestick-item">
+      {/* High to Low Wick Line */}
+      <line x1={wickX} y1={highY} x2={wickX} y2={lowY} stroke={color} strokeWidth={1.2} opacity={0.85} />
+      {/* Open to Close Body Rect */}
+      <rect
+        x={candleX}
+        y={candleTop}
+        width={barWidth}
+        height={candleHeight}
+        fill={color}
+        stroke={color}
+        strokeWidth={0.8}
+        rx={1}
+      />
+    </g>
+  );
+};
+
 export const ChartViewer: React.FC<ChartViewerProps> = ({
   candles = [],
   trades = [],
@@ -26,19 +70,31 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
   timeframe
 }) => {
   const [selectedTradeId, setSelectedTradeId] = useState<number | 'all'>('all');
-  const [chartType, setChartType] = useState<'line' | 'ohlc'>('line');
+  const [chartType, setChartType] = useState<'line' | 'ohlc'>('ohlc');
 
-  // Filter or focus on specific trade window if a trade is selected
+  // Filter active trade if specific trade selected
   const activeTrade = useMemo(() => {
     if (selectedTradeId === 'all') return null;
     return trades.find(t => t.id === selectedTradeId) || null;
   }, [selectedTradeId, trades]);
 
-  // Prepare chart data series
+  // Format candles and attach trade overlay metadata to dates
   const chartData = useMemo(() => {
     if (!candles || candles.length === 0) return [];
     
-    // Format timestamp display
+    // Map trades to time strings for quick lookup
+    const tradeMap = new Map<string, Trade[]>();
+    trades.forEach(t => {
+      const entryKey = t.entry_time.replace('T', ' ').slice(0, 16);
+      const exitKey = t.exit_time.replace('T', ' ').slice(0, 16);
+      
+      if (!tradeMap.has(entryKey)) tradeMap.set(entryKey, []);
+      tradeMap.get(entryKey)?.push(t);
+
+      if (!tradeMap.has(exitKey)) tradeMap.set(exitKey, []);
+      tradeMap.get(exitKey)?.push(t);
+    });
+
     return candles.map(c => {
       const dateStr = c.time.replace('T', ' ').slice(0, 16);
       return {
@@ -49,26 +105,24 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
         high: c.high,
         low: c.low,
         close: c.close,
-        volume: c.volume
+        volume: c.volume,
+        tradesOnCandle: tradeMap.get(dateStr) || []
       };
     });
-  }, [candles]);
+  }, [candles, trades]);
 
-  // Selected trade stats
+  // Trade details for inspection banner
   const selectedTradeStats = useMemo(() => {
     if (!activeTrade) return null;
     const isLong = activeTrade.size > 0;
     
-    // Estimate SL/TP if not explicitly provided by engine
     let sl = activeTrade.sl;
     let tp = activeTrade.tp;
     
     if (sl == null || sl === 0) {
-      // Default estimated 1% SL for visualization
       sl = isLong ? activeTrade.entry_price * 0.99 : activeTrade.entry_price * 1.01;
     }
     if (tp == null || tp === 0) {
-      // Default estimated 2% TP for visualization
       tp = isLong ? activeTrade.entry_price * 1.02 : activeTrade.entry_price * 0.98;
     }
 
@@ -85,22 +139,30 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
     };
   }, [activeTrade]);
 
+  // List of trades to plot on chart (either all trades or selected trade)
+  const tradesToPlot = useMemo(() => {
+    if (selectedTradeId !== 'all') {
+      return activeTrade ? [activeTrade] : [];
+    }
+    return trades;
+  }, [selectedTradeId, activeTrade, trades]);
+
   if (!candles || candles.length === 0) {
     return (
       <div className="card" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
         <CandlestickChart size={48} style={{ opacity: 0.3, marginBottom: '1rem', color: 'var(--accent-cyan)' }} />
         <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.1rem' }}>No Price & Trade Chart Available</h3>
         <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', maxWidth: '460px', marginLeft: 'auto', marginRight: 'auto' }}>
-          Run a backtest in the <strong>Backtest</strong> tab to generate historical candle price data and visual trade execution overlays.
+          Run a strategy backtest to generate historical candle price data and visual trade execution overlays.
         </p>
       </div>
     );
   }
 
-  // Find min/max price for Y-Axis domain padding
-  const prices = chartData.map(d => d.price).filter(p => p != null && !isNaN(p));
-  const minPrice = prices.length ? Math.min(...prices) * 0.998 : 0;
-  const maxPrice = prices.length ? Math.max(...prices) * 1.002 : 1;
+  // Y-Axis domain bounds
+  const prices = chartData.map(d => d.close).filter(p => p != null && !isNaN(p));
+  const minPrice = prices.length ? Math.min(...prices) * 0.997 : 0;
+  const maxPrice = prices.length ? Math.max(...prices) * 1.003 : 1;
 
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -119,7 +181,7 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {/* Trade Filter Dropdown */}
+          {/* Trade Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Inspect Trade:</span>
             <select
@@ -136,13 +198,19 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
             </select>
           </div>
 
-          {/* Toggle Chart Mode */}
+          {/* Toggle Candle / Line Mode */}
           <button
             onClick={() => setChartType(chartType === 'line' ? 'ohlc' : 'line')}
             className="btn"
-            style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', background: 'rgba(255,255,255,0.06)' }}
+            style={{ 
+              fontSize: '0.78rem', 
+              padding: '0.35rem 0.75rem', 
+              background: chartType === 'ohlc' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(6, 182, 212, 0.15)', 
+              color: chartType === 'ohlc' ? '#34d399' : '#38bdf8',
+              border: `1px solid ${chartType === 'ohlc' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(6, 182, 212, 0.3)'}`
+            }}
           >
-            {chartType === 'line' ? '📈 Line View' : '🕯️ Candle View'}
+            {chartType === 'line' ? '🕯️ Switch to Candle View' : '📈 Switch to Line View'}
           </button>
         </div>
       </div>
@@ -195,17 +263,17 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
         </div>
       )}
 
-      {/* Main Chart Canvas */}
-      <div style={{ width: '100%', height: 420 }}>
+      {/* Main Chart Area */}
+      <div style={{ width: '100%', height: 440 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 15, right: 20, left: 10, bottom: 25 }}>
+          <ComposedChart data={chartData} margin={{ top: 20, right: 25, left: 10, bottom: 25 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
             <XAxis 
               dataKey="time" 
               stroke="#64748b" 
               fontSize={11} 
               tickLine={false}
-              minTickGap={40}
+              minTickGap={45}
             />
             <YAxis 
               stroke="#64748b" 
@@ -217,25 +285,78 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
             <Tooltip 
               contentStyle={{ background: '#0f172a', borderColor: 'rgba(255,255,255,0.15)', borderRadius: '8px', fontSize: '0.8rem', color: '#f8fafc' }}
               labelStyle={{ color: '#94a3b8', fontWeight: 600, marginBottom: '0.25rem' }}
-              formatter={(val: any) => [typeof val === 'number' ? val.toFixed(5) : val, 'Price']}
+              formatter={(val: any, name: any) => [typeof val === 'number' ? val.toFixed(5) : val, name]}
             />
             
-            {/* Price Line */}
-            <Line 
-              type="monotone" 
-              dataKey="price" 
-              stroke="var(--accent-cyan)" 
-              strokeWidth={1.5} 
-              dot={false}
-              activeDot={{ r: 4, stroke: '#38bdf8', strokeWidth: 2 }}
-            />
+            {/* Conditional Rendering: Candlestick vs Line */}
+            {chartType === 'ohlc' ? (
+              <Bar 
+                dataKey="close" 
+                shape={<CustomCandlestickShape />} 
+                isAnimationActive={false}
+              />
+            ) : (
+              <Line 
+                type="monotone" 
+                dataKey="price" 
+                stroke="var(--accent-cyan)" 
+                strokeWidth={1.5} 
+                dot={false}
+                activeDot={{ r: 4, stroke: '#38bdf8', strokeWidth: 2 }}
+              />
+            )}
 
-            {/* Overlaid Stop Loss (SL) & Take Profit (TP) reference lines for active trade */}
+            {/* Overlaid Trades Entry & Exit Markers */}
+            {tradesToPlot.map((t) => {
+              const entryDateStr = t.entry_time.replace('T', ' ').slice(0, 16);
+              const exitDateStr = t.exit_time.replace('T', ' ').slice(0, 16);
+              const isLong = t.size > 0;
+
+              return (
+                <React.Fragment key={`trade-group-${t.id}`}>
+                  {/* Entry Marker */}
+                  <ReferenceDot
+                    x={entryDateStr}
+                    y={t.entry_price}
+                    r={6}
+                    fill={isLong ? '#10b981' : '#f43f5e'}
+                    stroke="#ffffff"
+                    strokeWidth={1.5}
+                    label={{
+                      value: isLong ? `▲ LONG #${t.id}` : `▼ SHORT #${t.id}`,
+                      fill: isLong ? '#34d399' : '#f43f5e',
+                      fontSize: 10,
+                      fontWeight: 700,
+                      position: isLong ? 'top' : 'bottom'
+                    }}
+                  />
+
+                  {/* Exit Marker */}
+                  <ReferenceDot
+                    x={exitDateStr}
+                    y={t.exit_price}
+                    r={5}
+                    fill={t.pnl >= 0 ? '#34d399' : '#f43f5e'}
+                    stroke="#0f172a"
+                    strokeWidth={1.5}
+                    label={{
+                      value: `Exit ${t.pnl >= 0 ? `+$${t.pnl.toFixed(1)}` : `-$${Math.abs(t.pnl).toFixed(1)}`}`,
+                      fill: '#94a3b8',
+                      fontSize: 9,
+                      position: 'top'
+                    }}
+                  />
+                </React.Fragment>
+              );
+            })}
+
+            {/* Overlaid SL, TP, and Entry Horizontal Lines for selected trade */}
             {selectedTradeStats && selectedTradeStats.sl && (
               <ReferenceLine 
                 y={selectedTradeStats.sl} 
                 stroke="#f43f5e" 
                 strokeDasharray="4 4" 
+                strokeWidth={1.5}
                 label={{ value: `SL: ${selectedTradeStats.sl.toFixed(5)}`, fill: '#f43f5e', fontSize: 11, position: 'insideRight' }} 
               />
             )}
@@ -244,6 +365,7 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
                 y={selectedTradeStats.tp} 
                 stroke="#34d399" 
                 strokeDasharray="4 4" 
+                strokeWidth={1.5}
                 label={{ value: `TP: ${selectedTradeStats.tp.toFixed(5)}`, fill: '#34d399', fontSize: 11, position: 'insideRight' }} 
               />
             )}
@@ -269,14 +391,22 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
         borderTop: '1px solid rgba(255,255,255,0.06)',
         paddingTop: '0.75rem'
       }}>
-        <div style={{ display: 'flex', gap: '1.25rem' }}>
+        <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-cyan)' }}></span>
-            Price Series ({symbol})
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
+            Bullish Candle (Up)
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-            <span style={{ width: '12px', height: '2px', background: '#38bdf8' }}></span>
-            Entry Price Level
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f43f5e' }}></span>
+            Bearish Candle (Down)
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#34d399' }}></span>
+            ▲ Long Entry
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f43f5e' }}></span>
+            ▼ Short Entry
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
             <span style={{ width: '12px', height: '2px', background: '#f43f5e', borderStyle: 'dashed' }}></span>
