@@ -75,70 +75,112 @@ def get_valid_hours_for_date(date: datetime.date) -> list[int]:
         return [21, 22, 23]
     return list(range(24))
 
+TICK_CACHE_DIR = os.path.join(DATA_DIR, "ticks")
+
 async def async_download_hour_ticks(symbol: str, date: datetime.date, hour: int, client: httpx.AsyncClient = None) -> pd.DataFrame:
     """
     Downloads and parses tick data for a single hour using vectorized NumPy binary parsing.
+    Checks local .bi5 disk cache first. If not cached, downloads from Dukascopy and caches locally.
     Retries up to 4 times with exponential backoff on HTTP 429 (rate-limit) responses.
     Returns a DataFrame with columns ['price', 'volume'] indexed by timestamp.
     """
     import random
 
-    duka_month = date.month - 1
-    url = f"https://datafeed.dukascopy.com/datafeed/{symbol.upper()}/{date.year}/{duka_month:02d}/{date.day:02d}/{hour:02d}h_ticks.bi5"
+    # Check local tick disk cache
+    tick_dir = os.path.join(TICK_CACHE_DIR, symbol.upper(), f"{date.year}", f"{date.month:02d}", f"{date.day:02d}")
+    os.makedirs(tick_dir, exist_ok=True)
+    tick_cache_path = os.path.join(tick_dir, f"{hour:02d}h_ticks.bi5")
 
-    max_retries = 4
-    base_backoff = 1.0  # seconds
-
-    for attempt in range(max_retries):
+    content = None
+    if os.path.exists(tick_cache_path):
         try:
-            if client is None:
-                async with httpx.AsyncClient(timeout=8.0) as temp_client:
-                    response = await temp_client.get(url)
-            else:
-                response = await client.get(url, timeout=8.0)
-
-            if response.status_code == 404:
+            with open(tick_cache_path, "rb") as f:
+                content = f.read()
+            if len(content) == 0:
+                # Cached 404 or empty hour
                 return pd.DataFrame(columns=["price", "volume"])
+        except Exception as e:
+            print(f"Error reading tick cache {tick_cache_path}: {e}")
+            content = None
 
-            # Retry on 429 with exponential backoff + jitter
-            if response.status_code == 429:
-                if attempt < max_retries - 1:
-                    wait = base_backoff * (2 ** attempt) + random.uniform(0, 0.5)
-                    print(f"Rate-limited on {url} (attempt {attempt + 1}/{max_retries}), retrying in {wait:.1f}s...")
-                    await asyncio.sleep(wait)
-                    continue
+    if content is None:
+        duka_month = date.month - 1
+        url = f"https://datafeed.dukascopy.com/datafeed/{symbol.upper()}/{date.year}/{duka_month:02d}/{date.day:02d}/{hour:02d}h_ticks.bi5"
+
+        max_retries = 4
+        base_backoff = 1.0  # seconds
+
+        for attempt in range(max_retries):
+            try:
+                if client is None:
+                    async with httpx.AsyncClient(timeout=8.0) as temp_client:
+                        response = await temp_client.get(url)
                 else:
-                    print(f"Rate-limited on {url}, max retries reached. Skipping.")
+                    response = await client.get(url, timeout=8.0)
+
+                if response.status_code == 404:
+                    # Cache empty file marker for 404
+                    try:
+                        with open(tick_cache_path, "wb") as f:
+                            f.write(b"")
+                    except Exception:
+                        pass
                     return pd.DataFrame(columns=["price", "volume"])
 
-            response.raise_for_status()
+                # Retry on 429 with exponential backoff + jitter
+                if response.status_code == 429:
+                    if attempt < max_retries - 1:
+                        wait = base_backoff * (2 ** attempt) + random.uniform(0, 0.5)
+                        print(f"Rate-limited on {url} (attempt {attempt + 1}/{max_retries}), retrying in {wait:.1f}s...")
+                        await asyncio.sleep(wait)
+                        continue
+                    else:
+                        print(f"Rate-limited on {url}, max retries reached. Skipping.")
+                        return pd.DataFrame(columns=["price", "volume"])
 
-            decompressed_data = lzma.decompress(response.content)
-            if not decompressed_data:
+                response.raise_for_status()
+                content = response.content
+
+                # Cache raw .bi5 content to disk
+                try:
+                    with open(tick_cache_path, "wb") as f:
+                        f.write(content)
+                except Exception as cache_err:
+                    print(f"Failed to write tick cache {tick_cache_path}: {cache_err}")
+
+                break
+
+            except httpx.HTTPStatusError as e:
+                print(f"HTTP error downloading {url}: {e}")
+                return pd.DataFrame(columns=["price", "volume"])
+            except Exception as e:
+                print(f"Error downloading {url}: {e}")
                 return pd.DataFrame(columns=["price", "volume"])
 
-            divider = get_point_divider(symbol)
+    if not content:
+        return pd.DataFrame(columns=["price", "volume"])
 
-            # Fast vector parsing with NumPy frombuffer
-            raw_ticks = np.frombuffer(decompressed_data, dtype=TICK_DTYPE)
-            if len(raw_ticks) == 0:
-                return pd.DataFrame(columns=["price", "volume"])
-
-            base_dt = pd.Timestamp(date.year, date.month, date.day, hour, 0, 0)
-            timestamps = base_dt + pd.to_timedelta(raw_ticks['ms_offset'], unit='ms')
-            prices = (raw_ticks['ask_raw'].astype(np.float64) + raw_ticks['bid_raw'].astype(np.float64)) / (2.0 * divider)
-            volumes = raw_ticks['ask_vol'] + raw_ticks['bid_vol']
-
-            return pd.DataFrame({"price": prices, "volume": volumes}, index=timestamps)
-
-        except httpx.HTTPStatusError as e:
-            print(f"HTTP error downloading {url}: {e}")
-            return pd.DataFrame(columns=["price", "volume"])
-        except Exception as e:
-            print(f"Error downloading {url}: {e}")
+    try:
+        decompressed_data = lzma.decompress(content)
+        if not decompressed_data:
             return pd.DataFrame(columns=["price", "volume"])
 
-    return pd.DataFrame(columns=["price", "volume"])
+        divider = get_point_divider(symbol)
+
+        # Fast vector parsing with NumPy frombuffer
+        raw_ticks = np.frombuffer(decompressed_data, dtype=TICK_DTYPE)
+        if len(raw_ticks) == 0:
+            return pd.DataFrame(columns=["price", "volume"])
+
+        base_dt = pd.Timestamp(date.year, date.month, date.day, hour, 0, 0)
+        timestamps = base_dt + pd.to_timedelta(raw_ticks['ms_offset'], unit='ms')
+        prices = (raw_ticks['ask_raw'].astype(np.float64) + raw_ticks['bid_raw'].astype(np.float64)) / (2.0 * divider)
+        volumes = raw_ticks['ask_vol'] + raw_ticks['bid_vol']
+
+        return pd.DataFrame({"price": prices, "volume": volumes}, index=timestamps)
+    except Exception as parse_err:
+        print(f"Error parsing tick data for {symbol} on {date} hour {hour}: {parse_err}")
+        return pd.DataFrame(columns=["price", "volume"])
 
 def download_hour_ticks(symbol: str, date: datetime.date, hour: int, session = None) -> pd.DataFrame:
     """Synchronous wrapper for download_hour_ticks."""
