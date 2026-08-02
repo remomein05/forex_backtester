@@ -8,7 +8,9 @@ import {
   Target, 
   ZoomIn, 
   ZoomOut, 
-  RotateCcw 
+  RotateCcw,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import type { Trade, CandlePoint } from '../api';
 
@@ -27,6 +29,8 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
 }) => {
   const [selectedTradeId, setSelectedTradeId] = useState<number | 'all'>('all');
   const [chartType, setChartType] = useState<'ohlc' | 'line'>('ohlc');
+  const [chartHeight, setChartHeight] = useState<number>(650);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
   // Zoom & Pan Range state (slice indices of candles array)
   const [range, setRange] = useState<{ start: number; end: number }>({
@@ -207,9 +211,9 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
   const visibleCandles = candles.slice(validStart, validEnd + 1);
 
   // Geometry dimensions for SVG rendering
-  const width = 1000;
-  const height = 450;
-  const padding = { top: 25, right: 65, bottom: 35, left: 15 };
+  const width = 1200;
+  const height = isFullscreen ? Math.max(700, window.innerHeight - 200) : chartHeight;
+  const padding = { top: 25, right: 75, bottom: 35, left: 15 };
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
 
@@ -269,7 +273,25 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
   }));
 
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+    <div 
+      className="card" 
+      style={isFullscreen ? {
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1000,
+        background: '#0a0f1d',
+        padding: '1.5rem',
+        overflowY: 'auto',
+        borderRadius: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '1.25rem'
+      } : { 
+        display: 'flex', 
+        flexDirection: 'column', 
+        gap: '1.25rem' 
+      }}
+    >
       {/* Header & Controls Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
@@ -347,6 +369,37 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
           >
             <RotateCcw size={14} />
           </button>
+
+          {/* Chart Height Preset Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Height:</span>
+            <select
+              value={chartHeight}
+              onChange={(e) => setChartHeight(Number(e.target.value))}
+              style={{ fontSize: '0.8rem', padding: '0.35rem 0.6rem', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', color: '#f8fafc' }}
+            >
+              <option value={550}>Medium (550px)</option>
+              <option value={700}>Large (700px)</option>
+              <option value={850}>Extra Large (850px)</option>
+            </select>
+          </div>
+
+          {/* Full Screen Toggle Button */}
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="btn"
+            title={isFullscreen ? "Exit Fullscreen" : "Maximize / Fullscreen"}
+            style={{ 
+              fontSize: '0.78rem', 
+              padding: '0.35rem 0.65rem', 
+              background: isFullscreen ? 'rgba(168, 85, 247, 0.2)' : 'rgba(255,255,255,0.06)',
+              color: isFullscreen ? 'var(--accent-purple)' : '#f8fafc',
+              gap: '0.3rem'
+            }}
+          >
+            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+          </button>
         </div>
       </div>
 
@@ -408,7 +461,7 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
         onMouseLeave={handleMouseUp}
         style={{ 
           width: '100%', 
-          height: 450, 
+          height: height, 
           background: '#090d16', 
           borderRadius: '10px', 
           border: '1px solid rgba(255,255,255,0.08)',
