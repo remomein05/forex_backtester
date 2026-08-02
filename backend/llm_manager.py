@@ -10,7 +10,7 @@ load_dotenv()
 # Common indicator helper functions to supply to the model
 INDICATOR_HELPERS = """
 ---
-Available indicator calculations (MUST assign to self.<indicator_name> inside self.I):
+Available indicator calculations & helper functions (MUST assign to self.<indicator_name> inside self.I):
 1. SMA:
    self.sma = self.I(SMA, self.data.Close, 20)
 
@@ -34,6 +34,10 @@ Available indicator calculations (MUST assign to self.<indicator_name> inside se
        return sma_val - (std_val * num_std)
    self.bb_up = self.I(bb_upper, self.data.Close, 20, 2)
    self.bb_low = self.I(bb_lower, self.data.Close, 20, 2)
+
+6. Recent High / Low (Highest / Lowest):
+   self.recent_high = self.I(get_recent_high, self.data.High, 20)
+   self.recent_low = self.I(get_recent_low, self.data.Low, 20)
 ---
 """
 
@@ -99,7 +103,7 @@ Guidelines:
    - For long: `sl = self.data.Close[-1] * (1 - 0.02)` (e.g. 2% stop).
    - For short: `sl = self.data.Close[-1] * (1 + 0.02)`.
 5. Ensure all data accesses are correct. `self.data.Close` is a series; access the current element as `self.data.Close[-1]`.
-6. Built-in functions `SMA`, `EMA`, `RSI`, `ATR` are automatically available in context.
+6. Built-in functions `SMA`, `EMA`, `RSI`, `ATR`, `STD`, `MACD`, `get_recent_high`, `get_recent_low`, `HIGHEST`, `LOWEST` are automatically available in context. Do not import undefined helper modules.
 
 {INDICATOR_HELPERS}
 """

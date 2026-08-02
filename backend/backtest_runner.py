@@ -109,6 +109,22 @@ def run_backtest_from_code(code_str: str, df: pd.DataFrame, cash: float = 10000.
         signal_line = macd_line.ewm(span=signal, adjust=False).mean()
         return macd_line, signal_line
 
+    def get_recent_high(array, period=None):
+        if isinstance(array, (int, float)) and period is None:
+            return float(array)
+        s = pd.Series(array)
+        if period is not None and int(period) > 0:
+            return s.rolling(int(period)).max().to_numpy()
+        return float(s.max()) if len(s) > 0 else np.nan
+
+    def get_recent_low(array, period=None):
+        if isinstance(array, (int, float)) and period is None:
+            return float(array)
+        s = pd.Series(array)
+        if period is not None and int(period) > 0:
+            return s.rolling(int(period)).min().to_numpy()
+        return float(s.min()) if len(s) > 0 else np.nan
+
     from backtesting.lib import crossover
 
     exec_globals = {
@@ -120,16 +136,50 @@ def run_backtest_from_code(code_str: str, df: pd.DataFrame, cash: float = 10000.
         "crossover": crossover,
         "SMA": SMA,
         "sma": SMA,
+        "Sma": SMA,
         "EMA": EMA,
         "ema": EMA,
+        "Ema": EMA,
         "RSI": RSI,
         "rsi": RSI,
+        "Rsi": RSI,
         "ATR": ATR,
         "atr": ATR,
+        "Atr": ATR,
         "STD": STD,
         "std": STD,
+        "Std": STD,
         "MACD": MACD,
         "macd": MACD,
+        "Macd": MACD,
+        "get_recent_high": get_recent_high,
+        "Get_Recent_High": get_recent_high,
+        "GetRecentHigh": get_recent_high,
+        "recent_high": get_recent_high,
+        "Recent_High": get_recent_high,
+        "RecentHigh": get_recent_high,
+        "get_recent_low": get_recent_low,
+        "Get_Recent_Low": get_recent_low,
+        "GetRecentLow": get_recent_low,
+        "recent_low": get_recent_low,
+        "Recent_Low": get_recent_low,
+        "RecentLow": get_recent_low,
+        "HIGHEST": get_recent_high,
+        "Highest": get_recent_high,
+        "highest": get_recent_high,
+        "highest_high": get_recent_high,
+        "Highest_High": get_recent_high,
+        "HighestHigh": get_recent_high,
+        "HH": get_recent_high,
+        "LOWEST": get_recent_low,
+        "Lowest": get_recent_low,
+        "lowest": get_recent_low,
+        "lowest_low": get_recent_low,
+        "Lowest_Low": get_recent_low,
+        "LowestLow": get_recent_low,
+        "LL": get_recent_low,
+        "MAX": get_recent_high,
+        "MIN": get_recent_low,
     }
 
     local_vars = {}
@@ -137,6 +187,8 @@ def run_backtest_from_code(code_str: str, df: pd.DataFrame, cash: float = 10000.
     try:
         # Dynamically execute code
         exec(code_str, exec_globals, local_vars)
+        # Update exec_globals with local_vars so methods on GeneratedStrategy can resolve top-level helpers
+        exec_globals.update(local_vars)
     except Exception as e:
         raise RuntimeError(f"Syntax error or execution error in generated code: {e}")
         

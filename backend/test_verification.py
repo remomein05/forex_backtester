@@ -138,6 +138,51 @@ class GeneratedStrategy(Strategy):
     
     assert results['metrics']['start_value'] == 10000.0, "Start value should be 10000"
     assert len(results['equity_curve']) == 100, "Equity curve length should match data"
+
+    # Test strategy using get_recent_high and get_recent_low
+    recent_high_strategy = """
+from backtesting import Strategy
+
+class GeneratedStrategy(Strategy):
+    def init(self):
+        self.rec_high = self.I(get_recent_high, self.data.High, 10)
+        self.rec_low = self.I(get_recent_low, self.data.Low, 10)
+
+    def next(self):
+        if self.data.Close[-1] > self.rec_high[-2]:
+            if not self.position:
+                self.buy()
+        elif self.data.Close[-1] < self.rec_low[-2]:
+            if self.position:
+                self.position.close()
+"""
+    res_high = run_backtest_from_code(recent_high_strategy, df, cash=10000.0)
+    assert res_high['metrics']['start_value'] == 10000.0, "Start value should be 10000"
+
+    # Test top-level helper function and alias resolution
+    top_level_helper_strategy = """
+from backtesting import Strategy
+
+def custom_breakout_level(high_series, period=10):
+    return get_recent_high(high_series, period)
+
+class GeneratedStrategy(Strategy):
+    def init(self):
+        self.rec_high = self.I(custom_breakout_level, self.data.High, 10)
+        self.rec_low = self.I(Lowest_Low, self.data.Low, 10)
+
+    def next(self):
+        if self.data.Close[-1] > self.rec_high[-2]:
+            if not self.position:
+                self.buy()
+        elif self.data.Close[-1] < self.rec_low[-2]:
+            if self.position:
+                self.position.close()
+"""
+    res_top_level = run_backtest_from_code(top_level_helper_strategy, df, cash=10000.0)
+    assert res_top_level['metrics']['start_value'] == 10000.0, "Start value should be 10000"
+
+    print("Recent high/low helper verification: SUCCESS")
     print("Backtest runner verification: SUCCESS")
 
 def test_llm_manager():
