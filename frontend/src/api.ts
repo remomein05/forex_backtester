@@ -211,6 +211,7 @@ export async function downloadData(
           if (e.message && (e.message.includes('failed') || e.message.includes('Error:'))) {
             throw e;
           }
+          console.error('Error parsing SSE stream line:', line, e);
         }
       }
     }
