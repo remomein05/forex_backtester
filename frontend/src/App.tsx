@@ -1,5 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldAlert, Cpu } from 'lucide-react';
+import { 
+  ShieldAlert, 
+  Cpu, 
+  Home, 
+  Layers, 
+  Play, 
+  CandlestickChart, 
+  Code, 
+  GitFork, 
+  ArrowRight,
+  Database,
+  Copy,
+  Check,
+  Zap
+} from 'lucide-react';
 import { 
   getPairs, 
   generateFlowchart, 
@@ -16,8 +30,16 @@ import StrategyEditor from './components/StrategyEditor';
 import FlowchartViewer from './components/FlowchartViewer';
 import Dashboard from './components/Dashboard';
 import TradeTable from './components/TradeTable';
+import ChartViewer from './components/ChartViewer';
+
+export type TabType = 'home' | 'strategy' | 'backtest' | 'chart';
 
 export const App: React.FC = () => {
+  // Navigation tab state
+  const [activeTab, setActiveTab] = useState<TabType>('home');
+  const [backtestSubView, setBacktestSubView] = useState<'code' | 'flowchart' | 'none'>('none');
+  const [isCopiedCode, setIsCopiedCode] = useState<boolean>(false);
+
   // Config state
   const [pairs, setPairs] = useState<string[]>(['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'XAUUSD']);
   const [selectedPair, setSelectedPair] = useState<string>('EURUSD');
@@ -80,7 +102,6 @@ export const App: React.FC = () => {
       })
       .catch(err => {
         console.error('Error fetching currency pairs:', err);
-        // Fail silently and use defaults
       });
   }, []);
 
@@ -192,11 +213,11 @@ export const App: React.FC = () => {
   // Action: Execute Backtest
   const handleRunBacktest = async () => {
     if (!generatedCode.trim()) {
-      setError('Strategy python code is empty.');
+      setError('Strategy python code is empty. Please generate strategy code first in the Strategy tab.');
       return;
     }
     if (!isDataReady) {
-      setError('Please download historical price data first.');
+      setError('Please download historical price data first in the Home tab.');
       return;
     }
 
@@ -215,6 +236,8 @@ export const App: React.FC = () => {
         commission
       );
       setBacktestResults(results);
+      // Auto-switch to Backtest tab when execution finishes
+      setActiveTab('backtest');
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Backtest execution failed.');
@@ -242,6 +265,13 @@ export const App: React.FC = () => {
     if (strat.higher_timeframe) setHigherTimeframe(strat.higher_timeframe);
   };
 
+  const handleCopyCode = () => {
+    if (!generatedCode) return;
+    navigator.clipboard.writeText(generatedCode);
+    setIsCopiedCode(true);
+    setTimeout(() => setIsCopiedCode(false), 2000);
+  };
+
   return (
     <div className="app-container">
       {/* Header Bar */}
@@ -249,19 +279,89 @@ export const App: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <Cpu size={28} style={{ color: 'var(--accent-cyan)' }} />
           <div>
-            <h1 style={{ fontSize: '1.4rem', fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>
               Forex Strategy Backtester & Compiler
             </h1>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
-              AI-Powered Strategy Generation with Dukascopy Tick Precision
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0 }}>
+              AI-Powered Strategy Compilation with Dukascopy Tick Precision
             </p>
           </div>
         </div>
+
+        {/* Header Status Badges */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <span style={{ 
+            fontSize: '0.75rem', 
+            padding: '0.3rem 0.65rem', 
+            borderRadius: '20px', 
+            background: isDataReady ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)', 
+            border: `1px solid ${isDataReady ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+            color: isDataReady ? '#34d399' : '#fbbf24',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.3rem'
+          }}>
+            <Database size={12} /> {isDataReady ? `${selectedPair} Data Ready` : 'Data Needed'}
+          </span>
+
+          <span style={{ 
+            fontSize: '0.75rem', 
+            padding: '0.3rem 0.65rem', 
+            borderRadius: '20px', 
+            background: generatedCode ? 'rgba(6, 182, 212, 0.15)' : 'rgba(255, 255, 255, 0.06)', 
+            border: `1px solid ${generatedCode ? 'rgba(6, 182, 212, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`,
+            color: generatedCode ? '#38bdf8' : '#94a3b8',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.3rem'
+          }}>
+            <Code size={12} /> {generatedCode ? 'Strategy Compiled' : 'No Code'}
+          </span>
+        </div>
       </header>
+
+      {/* 4-Tab Navigation Bar */}
+      <nav className="tab-navigation">
+        <button
+          className={`tab-btn ${activeTab === 'home' ? 'active' : ''}`}
+          onClick={() => setActiveTab('home')}
+        >
+          <Home size={18} />
+          <span>Home</span>
+          <span className="tab-badge">Config</span>
+        </button>
+
+        <button
+          className={`tab-btn ${activeTab === 'strategy' ? 'active' : ''}`}
+          onClick={() => setActiveTab('strategy')}
+        >
+          <Layers size={18} />
+          <span>Strategy</span>
+          <span className="tab-badge">Compiler</span>
+        </button>
+
+        <button
+          className={`tab-btn ${activeTab === 'backtest' ? 'active' : ''}`}
+          onClick={() => setActiveTab('backtest')}
+        >
+          <Play size={18} />
+          <span>Backtest</span>
+          {backtestResults && <span className="tab-badge" style={{ background: '#10b981', color: '#0f172a' }}>Results</span>}
+        </button>
+
+        <button
+          className={`tab-btn ${activeTab === 'chart' ? 'active' : ''}`}
+          onClick={() => setActiveTab('chart')}
+        >
+          <CandlestickChart size={18} />
+          <span>Chart</span>
+          {backtestResults?.trades && <span className="tab-badge">{backtestResults.trades.length} Trades</span>}
+        </button>
+      </nav>
 
       {/* Global Error Banner */}
       {error && (
-        <div style={{ margin: '1.5rem 1.5rem 0 1.5rem', background: 'var(--color-danger-bg)', border: '1px solid rgba(244, 63, 94, 0.2)', padding: '1rem', borderRadius: '8px', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        <div style={{ margin: '1rem 1.5rem 0 1.5rem', background: 'var(--color-danger-bg)', border: '1px solid rgba(244, 63, 94, 0.2)', padding: '0.85rem 1rem', borderRadius: '8px', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           <ShieldAlert size={20} style={{ color: 'var(--color-danger)' }} />
           <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{error}</span>
           <button 
@@ -273,43 +373,109 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Main Layout Body */}
-      <div className="main-layout">
+      {/* Main Tab Content View */}
+      <main style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', flex: 1 }}>
         
-        {/* Left Control Sidebar */}
-        <aside style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <ControlPanel
-            pairs={pairs}
-            selectedPair={selectedPair}
-            setSelectedPair={setSelectedPair}
-            isCustomPair={isCustomPair}
-            setIsCustomPair={setIsCustomPair}
-            timeframe={timeframe}
-            setTimeframe={setTimeframe}
-            higherTimeframe={higherTimeframe}
-            setHigherTimeframe={setHigherTimeframe}
-            startDate={startDate}
-            setStartDate={setStartDate}
-            endDate={endDate}
-            setEndDate={setEndDate}
-            cash={cash}
-            setCash={setCash}
-            commission={commission}
-            setCommission={setCommission}
-            onDownloadData={handleDownloadData}
-            isDownloading={isDownloading}
-            downloadProgress={downloadProgress}
-            downloadStatus={downloadStatus}
-            downloadInfo={downloadInfo}
-            isDataReady={isDataReady}
-          />
-        </aside>
+        {/* ================= TAB 1: HOME ================= */}
+        {activeTab === 'home' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', alignItems: 'start' }}>
+            {/* Backtester Config Panel */}
+            <div>
+              <ControlPanel
+                pairs={pairs}
+                selectedPair={selectedPair}
+                setSelectedPair={setSelectedPair}
+                isCustomPair={isCustomPair}
+                setIsCustomPair={setIsCustomPair}
+                timeframe={timeframe}
+                setTimeframe={setTimeframe}
+                higherTimeframe={higherTimeframe}
+                setHigherTimeframe={setHigherTimeframe}
+                startDate={startDate}
+                setStartDate={setStartDate}
+                endDate={endDate}
+                setEndDate={setEndDate}
+                cash={cash}
+                setCash={setCash}
+                commission={commission}
+                setCommission={setCommission}
+                onDownloadData={handleDownloadData}
+                isDownloading={isDownloading}
+                downloadProgress={downloadProgress}
+                downloadStatus={downloadStatus}
+                downloadInfo={downloadInfo}
+                isDataReady={isDataReady}
+              />
+            </div>
 
-        {/* Right Dashboard and Workspace Panels */}
-        <main style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          
-          {/* Top Panel: Strategy and Flowchart Side-by-Side */}
+            {/* Home Sidebar Overview / Quick Workflow Guide */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div className="card">
+                <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 0.75rem 0', display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#f8fafc' }}>
+                  <Zap size={18} style={{ color: 'var(--accent-cyan)' }} /> Strategy Workflow Guide
+                </h3>
+                <ol style={{ paddingLeft: '1.2rem', margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <li>
+                    <strong style={{ color: '#f8fafc' }}>Home Tab (Backtester Config):</strong> Select currency pair, date range (clamped to 2026), timeframe, and click <em>Download Tick Data</em>.
+                  </li>
+                  <li>
+                    <strong style={{ color: '#f8fafc' }}>Strategy Tab (Workspace):</strong> Describe your forex trading logic in plain English, select model runtime, generate & verify the flowchart, then generate Python code.
+                  </li>
+                  <li>
+                    <strong style={{ color: '#f8fafc' }}>Backtest Tab:</strong> Click <em>Execute Backtest</em> to compile the strategy against historical tick data, inspect net return, win rate, and drawdown.
+                  </li>
+                  <li>
+                    <strong style={{ color: '#f8fafc' }}>Chart Tab:</strong> Analyze entry markers, Stop Loss (SL) levels, and Take Profit (TP) levels visually on the price chart.
+                  </li>
+                </ol>
+              </div>
+
+              {/* Status Summary Widget */}
+              <div className="card" style={{ background: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <h4 style={{ fontSize: '0.875rem', fontWeight: 600, margin: '0 0 0.75rem 0', color: 'var(--text-muted)' }}>
+                  Current System Status
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', fontSize: '0.8rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Target Symbol:</span>
+                    <strong style={{ color: 'var(--accent-cyan)' }}>{selectedPair}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Timeframe:</span>
+                    <strong style={{ color: '#f8fafc' }}>{timeframe.toUpperCase()}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Date Range:</span>
+                    <span style={{ color: '#f8fafc' }}>{startDate} to {endDate}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Initial Capital:</span>
+                    <span style={{ color: '#34d399', fontWeight: 600 }}>${cash.toLocaleString()}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Tick Data Feed:</span>
+                    <span style={{ color: isDataReady ? '#34d399' : '#fbbf24' }}>
+                      {isDataReady ? '✓ Loaded' : 'Pending Download'}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setActiveTab('strategy')}
+                  className="btn btn-primary"
+                  style={{ width: '100%', marginTop: '1rem', fontSize: '0.85rem', gap: '0.4rem', justifyContent: 'center' }}
+                >
+                  Proceed to Strategy Tab <ArrowRight size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= TAB 2: STRATEGY ================= */}
+        {activeTab === 'strategy' && (
           <div className="workspace-grid">
+            {/* Strategy Workspace */}
             <StrategyEditor
               strategyDesc={strategyDesc}
               setStrategyDesc={setStrategyDesc}
@@ -333,6 +499,7 @@ export const App: React.FC = () => {
               isDataReady={isDataReady}
             />
             
+            {/* Strategy Flowchart */}
             <FlowchartViewer
               chartCode={flowchartCode}
               isVerified={isFlowchartVerified}
@@ -341,22 +508,140 @@ export const App: React.FC = () => {
               isLoading={isFlowchartLoading}
             />
           </div>
+        )}
 
-          {/* Bottom Panel: Backtest Analytics Dashboard */}
-          <Dashboard
-            metrics={backtestResults ? backtestResults.metrics : null}
-            equityCurve={backtestResults ? backtestResults.equity_curve : []}
-            isLoading={isBacktestRunning}
+        {/* ================= TAB 3: BACKTEST ================= */}
+        {activeTab === 'backtest' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {/* Backtest Control & Code Inspection Toolbar */}
+            <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <h2 style={{ fontSize: '1.1rem', fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Play size={20} style={{ color: 'var(--accent-cyan)' }} /> Backtest Execution & Analytics
+                </h2>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.2rem 0 0 0' }}>
+                  Symbol: <strong>{selectedPair}</strong> | Timeframe: <strong>{timeframe.toUpperCase()}</strong> | Range: <strong>{startDate} to {endDate}</strong> | Capital: <strong>${cash.toLocaleString()}</strong>
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                {/* View Flowchart Option */}
+                <button
+                  onClick={() => setBacktestSubView(backtestSubView === 'flowchart' ? 'none' : 'flowchart')}
+                  className="btn"
+                  style={{ 
+                    fontSize: '0.8rem', 
+                    padding: '0.45rem 0.8rem', 
+                    background: backtestSubView === 'flowchart' ? 'rgba(6, 182, 212, 0.2)' : 'rgba(255,255,255,0.06)',
+                    color: backtestSubView === 'flowchart' ? 'var(--accent-cyan)' : '#f8fafc',
+                    gap: '0.35rem' 
+                  }}
+                >
+                  <GitFork size={14} /> {backtestSubView === 'flowchart' ? 'Hide Flowchart' : 'View Flowchart'}
+                </button>
+
+                {/* View Generated Python Code Option */}
+                <button
+                  onClick={() => setBacktestSubView(backtestSubView === 'code' ? 'none' : 'code')}
+                  className="btn"
+                  style={{ 
+                    fontSize: '0.8rem', 
+                    padding: '0.45rem 0.8rem', 
+                    background: backtestSubView === 'code' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(255,255,255,0.06)',
+                    color: backtestSubView === 'code' ? 'var(--accent-purple)' : '#f8fafc',
+                    gap: '0.35rem' 
+                  }}
+                >
+                  <Code size={14} /> {backtestSubView === 'code' ? 'Hide Python Code' : 'View Python Code'}
+                </button>
+
+                {/* Execute Backtest Primary Action Button */}
+                <button
+                  onClick={handleRunBacktest}
+                  disabled={isBacktestRunning || !generatedCode.trim() || !isDataReady}
+                  className="btn btn-primary"
+                  style={{ fontSize: '0.85rem', padding: '0.5rem 1.25rem', gap: '0.4rem' }}
+                >
+                  <Play size={16} /> {isBacktestRunning ? 'Executing Backtest...' : 'Execute Backtest'}
+                </button>
+              </div>
+            </div>
+
+            {/* Optional Collapsible Sub-View: Strategy Flowchart */}
+            {backtestSubView === 'flowchart' && (
+              <div className="card">
+                <FlowchartViewer
+                  chartCode={flowchartCode}
+                  isVerified={isFlowchartVerified}
+                  onVerify={setIsFlowchartVerified}
+                  onRegenerate={handleGenerateFlowchart}
+                  isLoading={isFlowchartLoading}
+                />
+              </div>
+            )}
+
+            {/* Optional Collapsible Sub-View: Generated Python Code Editor */}
+            {backtestSubView === 'code' && (
+              <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Code size={16} style={{ color: 'var(--accent-purple)' }} /> Generated Strategy Python Code (backtesting.py)
+                  </h3>
+                  <button
+                    onClick={handleCopyCode}
+                    className="btn"
+                    style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem', gap: '0.3rem', background: 'rgba(255,255,255,0.06)' }}
+                  >
+                    {isCopiedCode ? <Check size={14} style={{ color: '#34d399' }} /> : <Copy size={14} />}
+                    {isCopiedCode ? 'Copied!' : 'Copy Code'}
+                  </button>
+                </div>
+                <textarea
+                  rows={12}
+                  value={generatedCode}
+                  onChange={(e) => setGeneratedCode(e.target.value)}
+                  style={{ 
+                    width: '100%', 
+                    fontFamily: 'var(--font-mono)', 
+                    fontSize: '0.82rem', 
+                    background: '#090d16', 
+                    color: '#e2e8f0', 
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '8px',
+                    padding: '0.75rem'
+                  }}
+                  placeholder="# Generated strategy Python code will appear here..."
+                />
+              </div>
+            )}
+
+            {/* Backtest Analytics Dashboard (Metrics & Equity Curve) */}
+            <Dashboard
+              metrics={backtestResults ? backtestResults.metrics : null}
+              equityCurve={backtestResults ? backtestResults.equity_curve : []}
+              isLoading={isBacktestRunning}
+            />
+
+            {/* Trades History Table */}
+            {backtestResults && backtestResults.trades && (
+              <TradeTable trades={backtestResults.trades} />
+            )}
+          </div>
+        )}
+
+        {/* ================= TAB 4: CHART ================= */}
+        {activeTab === 'chart' && (
+          <ChartViewer
+            candles={backtestResults?.candles}
+            trades={backtestResults?.trades}
+            symbol={selectedPair}
+            timeframe={timeframe}
           />
+        )}
 
-          {/* Trade Table log */}
-          {backtestResults && backtestResults.trades && (
-            <TradeTable trades={backtestResults.trades} />
-          )}
-
-        </main>
-      </div>
+      </main>
     </div>
   );
 };
+
 export default App;

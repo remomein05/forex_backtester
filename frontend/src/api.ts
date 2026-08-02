@@ -34,6 +34,8 @@ export interface Trade {
   pnl: number;
   return_pct: number;
   duration: string;
+  sl?: number | null;
+  tp?: number | null;
 }
 
 export interface EquityPoint {
@@ -42,10 +44,20 @@ export interface EquityPoint {
   drawdown: number;
 }
 
+export interface CandlePoint {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
 export interface BacktestResponse {
   metrics: MetricData;
   trades: Trade[];
   equity_curve: EquityPoint[];
+  candles?: CandlePoint[];
 }
 
 export interface DownloadProgress {

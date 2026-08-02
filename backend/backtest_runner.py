@@ -246,6 +246,9 @@ def run_backtest_from_code(code_str: str, df: pd.DataFrame, cash: float = 10000.
     if "_trades" in stats and stats["_trades"] is not None:
         trades_df = stats["_trades"]
         for idx, row in trades_df.iterrows():
+            sl_val = clean_value(row["SL"]) if "SL" in row and pd.notna(row["SL"]) else None
+            tp_val = clean_value(row["TP"]) if "TP" in row and pd.notna(row["TP"]) else None
+            
             trades_list.append({
                 "id": int(idx),
                 "size": clean_value(row["Size"]),
@@ -255,7 +258,9 @@ def run_backtest_from_code(code_str: str, df: pd.DataFrame, cash: float = 10000.
                 "exit_time": clean_value(row["ExitTime"]),
                 "pnl": clean_value(row["PnL"]),
                 "return_pct": clean_value(row["ReturnPct"] * 100.0), # convert ratio to percentage
-                "duration": str(row["Duration"])
+                "duration": str(row["Duration"]),
+                "sl": sl_val,
+                "tp": tp_val
             })
             
     # Extract equity curve
@@ -264,13 +269,28 @@ def run_backtest_from_code(code_str: str, df: pd.DataFrame, cash: float = 10000.
         eq_df = stats["_equity_curve"]
         for dt, row in eq_df.iterrows():
             equity_curve.append({
-                "time": dt.isoformat(),
+                "time": dt.isoformat() if hasattr(dt, 'isoformat') else str(dt),
                 "equity": clean_value(row["Equity"]),
                 "drawdown": clean_value(row["DrawdownPct"] * 100.0) if "DrawdownPct" in row else 0.0
             })
             
+    # Extract sampled candle series (up to 2000 points) for chart visualization
+    candles_list = []
+    step = max(1, len(df) // 1500)
+    df_sampled = df.iloc[::step]
+    for dt, row in df_sampled.iterrows():
+        candles_list.append({
+            "time": dt.isoformat() if hasattr(dt, 'isoformat') else str(dt),
+            "open": clean_value(row["Open"]),
+            "high": clean_value(row["High"]),
+            "low": clean_value(row["Low"]),
+            "close": clean_value(row["Close"]),
+            "volume": clean_value(row["Volume"]) if "Volume" in row else 0
+        })
+
     return {
         "metrics": metrics,
         "trades": trades_list,
-        "equity_curve": equity_curve
+        "equity_curve": equity_curve,
+        "candles": candles_list
     }
