@@ -120,7 +120,8 @@ def call_llm(
     system_instruction: str,
     provider: str = "agy_cli",
     api_key: str = None,
-    model: str = "gemini-2.5-flash"
+    model: str = "gemini-3.1-pro",
+    effort: str = None
 ) -> str:
     """Dispatches LLM calls either through local AGY CLI or Google Gemini API Key."""
     if provider == "agy_cli":
@@ -128,7 +129,13 @@ def call_llm(
         cmd = ["agy", "--print", combined_prompt]
         if model:
             cmd.extend(["--model", model])
-        
+            # Auto-assign --effort for models requiring it (e.g., gemini-3.1-pro, thinking/pro models)
+            eff = effort
+            if not eff and ("3.1" in model or "pro" in model or "thinking" in model or "reasoning" in model):
+                eff = "high"
+            if eff:
+                cmd.extend(["--effort", eff])
+
         try:
             result = subprocess.run(
                 cmd,
@@ -249,8 +256,9 @@ def sanitize_mermaid_code(code: str) -> str:
 def generate_flowchart(
     strategy_desc: str,
     api_key: str = None,
-    model: str = "gemini-2.5-flash",
-    provider: str = "agy_cli"
+    model: str = "gemini-3.1-pro",
+    provider: str = "agy_cli",
+    effort: str = None
 ) -> str:
     """Generates a Mermaid.js flowchart from strategy description."""
     contents = f"Strategy Description: {strategy_desc}\n\nGenerate the flowchart."
@@ -259,7 +267,8 @@ def generate_flowchart(
         system_instruction=FLOWCHART_SYSTEM_PROMPT,
         provider=provider,
         api_key=api_key,
-        model=model
+        model=model,
+        effort=effort
     )
     
     # Extract mermaid markdown block if present
@@ -270,9 +279,10 @@ def generate_flowchart(
 def generate_strategy_code(
     strategy_desc: str,
     api_key: str = None,
-    model: str = "gemini-2.5-flash",
+    model: str = "gemini-3.1-pro",
     higher_timeframe: str = None,
-    provider: str = "agy_cli"
+    provider: str = "agy_cli",
+    effort: str = None
 ) -> str:
     """Generates backtesting.py compatible python code from strategy description."""
     mtf_text = ""
@@ -285,7 +295,8 @@ def generate_strategy_code(
         system_instruction=STRATEGY_SYSTEM_PROMPT,
         provider=provider,
         api_key=api_key,
-        model=model
+        model=model,
+        effort=effort
     )
     
     # Extract python markdown block if present

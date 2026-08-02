@@ -84,7 +84,7 @@ export async function getPairs(): Promise<PairResponse> {
   return res.json();
 }
 
-export async function generateFlowchart(strategyDesc: string, apiKey?: string, model?: string, provider?: string): Promise<FlowchartResponse> {
+export async function generateFlowchart(strategyDesc: string, apiKey?: string, model?: string, provider?: string, effort?: string): Promise<FlowchartResponse> {
   const res = await fetch(`${API_BASE}/generate-flowchart`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -92,7 +92,8 @@ export async function generateFlowchart(strategyDesc: string, apiKey?: string, m
       strategy_desc: strategyDesc, 
       api_key: apiKey || undefined,
       model: model || undefined,
-      provider: provider || 'agy_cli'
+      provider: provider || 'agy_cli',
+      effort: effort || 'high'
     }),
   });
   if (!res.ok) {
@@ -102,7 +103,7 @@ export async function generateFlowchart(strategyDesc: string, apiKey?: string, m
   return res.json();
 }
 
-export async function generateStrategy(strategyDesc: string, apiKey?: string, model?: string, higherTimeframe?: string, provider?: string): Promise<StrategyResponse> {
+export async function generateStrategy(strategyDesc: string, apiKey?: string, model?: string, higherTimeframe?: string, provider?: string, effort?: string): Promise<StrategyResponse> {
   const res = await fetch(`${API_BASE}/generate-strategy`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -111,7 +112,8 @@ export async function generateStrategy(strategyDesc: string, apiKey?: string, mo
       api_key: apiKey || undefined,
       model: model || undefined,
       higher_timeframe: higherTimeframe || undefined,
-      provider: provider || 'agy_cli'
+      provider: provider || 'agy_cli',
+      effort: effort || 'high'
     }),
   });
   if (!res.ok) {
