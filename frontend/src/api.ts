@@ -197,3 +197,49 @@ export async function downloadData(
     }
   }
 }
+
+export interface SavedStrategy {
+  id?: string;
+  name: string;
+  description: string;
+  flowchart_code?: string;
+  python_code?: string;
+  symbol?: string;
+  timeframe?: string;
+  higher_timeframe?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function getSavedStrategies(): Promise<{ strategies: SavedStrategy[] }> {
+  const res = await fetch(`${API_BASE}/strategies`);
+  if (!res.ok) {
+    const msg = await parseErrorMessage(res, 'Failed to fetch saved strategies.');
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export async function saveStrategy(strategy: SavedStrategy): Promise<{ status: string; strategy: SavedStrategy }> {
+  const res = await fetch(`${API_BASE}/strategies`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(strategy),
+  });
+  if (!res.ok) {
+    const msg = await parseErrorMessage(res, 'Failed to save strategy.');
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export async function deleteStrategy(strategyId: string): Promise<{ status: string; deleted_id: string }> {
+  const res = await fetch(`${API_BASE}/strategies/${strategyId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const msg = await parseErrorMessage(res, 'Failed to delete strategy.');
+    throw new Error(msg);
+  }
+  return res.json();
+}

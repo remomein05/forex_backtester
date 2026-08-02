@@ -8,7 +8,8 @@ import {
   downloadData 
 } from './api';
 import type { 
-  BacktestResponse 
+  BacktestResponse,
+  SavedStrategy
 } from './api';
 import ControlPanel, { type DownloadInfo } from './components/ControlPanel';
 import StrategyEditor from './components/StrategyEditor';
@@ -222,6 +223,25 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleLoadStrategy = (strat: SavedStrategy) => {
+    if (strat.description) setStrategyDesc(strat.description);
+    if (strat.flowchart_code) {
+      setFlowchartCode(strat.flowchart_code);
+      setIsFlowchartVerified(true);
+    } else {
+      setFlowchartCode('');
+      setIsFlowchartVerified(false);
+    }
+    if (strat.python_code) {
+      setGeneratedCode(strat.python_code);
+    } else {
+      setGeneratedCode('');
+    }
+    if (strat.symbol) setSelectedPair(strat.symbol);
+    if (strat.timeframe) setTimeframe(strat.timeframe);
+    if (strat.higher_timeframe) setHigherTimeframe(strat.higher_timeframe);
+  };
+
   return (
     <div className="app-container">
       {/* Header Bar */}
@@ -306,6 +326,7 @@ export const App: React.FC = () => {
               onGenerateFlowchart={handleGenerateFlowchart}
               onGenerateStrategyCode={handleGenerateStrategyCode}
               onRunBacktest={handleRunBacktest}
+              onLoadStrategy={handleLoadStrategy}
               isFlowchartLoading={isFlowchartLoading}
               isCodeLoading={isCodeLoading}
               isBacktestRunning={isBacktestRunning}

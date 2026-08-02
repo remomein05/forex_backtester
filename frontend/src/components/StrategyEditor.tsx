@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Play, Sparkles, AlertTriangle, Eye, EyeOff } from 'lucide-react';
+import { Play, Sparkles, AlertTriangle, Eye, EyeOff, Bookmark } from 'lucide-react';
+import { SavedStrategiesModal } from './SavedStrategiesModal';
+import type { SavedStrategy } from '../api';
 
 interface StrategyEditorProps {
   strategyDesc: string;
@@ -17,6 +19,7 @@ interface StrategyEditorProps {
   onGenerateFlowchart: () => void;
   onGenerateStrategyCode: () => void;
   onRunBacktest: () => void;
+  onLoadStrategy: (strategy: SavedStrategy) => void;
   isFlowchartLoading: boolean;
   isCodeLoading: boolean;
   isBacktestRunning: boolean;
@@ -39,20 +42,48 @@ export const StrategyEditor: React.FC<StrategyEditorProps> = ({
   onGenerateFlowchart,
   onGenerateStrategyCode,
   onRunBacktest,
+  onLoadStrategy,
   isFlowchartLoading,
   isCodeLoading,
   isBacktestRunning,
   isDataReady
 }) => {
   const [showKey, setShowKey] = useState<boolean>(false);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
   return (
     <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', height: '100%' }}>
-      <div>
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Sparkles size={18} style={{ color: 'var(--accent-purple)' }} /> Strategy Workspace
-        </h3>
-        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Describe your trading strategy and compile it to code</p>
+      <SavedStrategiesModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        currentDesc={strategyDesc}
+        currentFlowchart={flowchartCode}
+        currentCode={generatedCode}
+        onLoadStrategy={onLoadStrategy}
+      />
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Sparkles size={18} style={{ color: 'var(--accent-purple)' }} /> Strategy Workspace
+          </h3>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Describe your trading strategy and compile it to code</p>
+        </div>
+
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="btn"
+          style={{
+            fontSize: '0.8rem',
+            padding: '0.45rem 0.85rem',
+            background: 'rgba(168, 85, 247, 0.15)',
+            color: 'var(--accent-purple)',
+            border: '1px solid rgba(168, 85, 247, 0.3)',
+            gap: '0.4rem'
+          }}
+        >
+          <Bookmark size={15} /> Saved Strategies
+        </button>
       </div>
 
       {/* Provider, API Key and Model configuration */}
