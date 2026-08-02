@@ -95,7 +95,7 @@ async def download_data(req: DownloadRequest):
             candle_count = len(df) if df is not None and not df.empty else 0
             date_from = str(df.index[0].date()) if candle_count > 0 else "N/A"
             date_to   = str(df.index[-1].date()) if candle_count > 0 else "N/A"
-            msg = f"{'Loaded from cache' if already_cached else 'Downloaded'}: {candle_count:,} M1 bars ({date_from} → {date_to})"
+            msg = f"{'Loaded from cache' if already_cached else 'Downloaded'}: {candle_count:,} M1 bars ({date_from} -> {date_to})"
             yield f"data: {json.dumps({'progress': 100, 'status': 'completed', 'candle_count': candle_count, 'date_from': date_from, 'date_to': date_to, 'message': msg})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'progress': 100, 'status': 'error', 'message': f'Error: {str(e)}'})}\n\n"

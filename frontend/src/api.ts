@@ -203,13 +203,18 @@ export async function downloadData(
         try {
           const jsonStr = line.slice(line.indexOf('{'));
           const data: DownloadProgress = JSON.parse(jsonStr);
+          if (data.status === 'error') {
+            throw new Error(data.message || 'Data download failed on server.');
+          }
           onProgress(data);
-        } catch (e) {
+        } catch (e: any) {
+          if (e.message && (e.message.includes('failed') || e.message.includes('Error:'))) {
+            throw e;
+          }
           console.error('Error parsing SSE stream line:', line, e);
         }
       }
     }
-  }
 }
 
 export interface SavedStrategy {
