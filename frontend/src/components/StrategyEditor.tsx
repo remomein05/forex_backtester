@@ -335,7 +335,7 @@ export const StrategyEditor: React.FC<StrategyEditorProps> = ({
           <select
             id="model"
             value={
-              ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'].includes(selectedModel)
+              ['gemini-3.1-pro', 'gemini-3.1-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite'].includes(selectedModel)
                 ? selectedModel
                 : 'custom'
             }
@@ -344,28 +344,29 @@ export const StrategyEditor: React.FC<StrategyEditorProps> = ({
               if (val !== 'custom') {
                 setSelectedModel(val);
               } else {
-                if (['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'].includes(selectedModel)) {
+                if (['gemini-3.1-pro', 'gemini-3.1-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite'].includes(selectedModel)) {
                   setSelectedModel('custom-model');
                 }
               }
             }}
             style={{ fontSize: '0.85rem' }}
           >
-            <optgroup label="AGY CLI / Gemini Models">
-              <option value="gemini-2.5-flash">Gemini 2.5 Flash (Default)</option>
+            <optgroup label="Gemini 3.1 Models">
+              <option value="gemini-3.1-pro">Gemini 3.1 Pro (Latest)</option>
+              <option value="gemini-3.1-flash">Gemini 3.1 Flash</option>
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+            </optgroup>
+            <optgroup label="Gemini 2.5 Models">
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
               <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
               <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
-              <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-              <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
-              <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-              <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
             </optgroup>
             <optgroup label="Custom AGY Model / Runtime">
               <option value="custom">⚙️ Custom AGY Model...</option>
             </optgroup>
           </select>
 
-          {!['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'].includes(selectedModel) && (
+          {!['gemini-3.1-pro', 'gemini-3.1-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite'].includes(selectedModel) && (
             <input
               type="text"
               value={selectedModel === 'custom-model' ? '' : selectedModel}

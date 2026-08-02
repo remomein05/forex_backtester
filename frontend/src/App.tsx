@@ -38,7 +38,7 @@ export const App: React.FC = () => {
   );
   const [llmProvider, setLlmProvider] = useState<string>('agy_cli');
   const [apiKey, setApiKey] = useState<string>('');
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.1-pro');
   
   // Generation & Verification pipeline states
   const [flowchartCode, setFlowchartCode] = useState<string>('');
