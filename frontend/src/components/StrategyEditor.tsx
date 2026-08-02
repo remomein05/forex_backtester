@@ -331,11 +331,49 @@ export const StrategyEditor: React.FC<StrategyEditorProps> = ({
         </div>
 
         <div>
-          <label htmlFor="model">Model</label>
-          <select id="model" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} style={{ fontSize: '0.85rem' }}>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+          <label htmlFor="model">Model Runtime</label>
+          <select
+            id="model"
+            value={
+              ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'].includes(selectedModel)
+                ? selectedModel
+                : 'custom'
+            }
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val !== 'custom') {
+                setSelectedModel(val);
+              } else {
+                if (['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'].includes(selectedModel)) {
+                  setSelectedModel('custom-model');
+                }
+              }
+            }}
+            style={{ fontSize: '0.85rem' }}
+          >
+            <optgroup label="AGY CLI / Gemini Models">
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash (Default)</option>
+              <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
+              <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+              <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
+              <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+              <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+            </optgroup>
+            <optgroup label="Custom AGY Model / Runtime">
+              <option value="custom">⚙️ Custom AGY Model...</option>
+            </optgroup>
           </select>
+
+          {!['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'].includes(selectedModel) && (
+            <input
+              type="text"
+              value={selectedModel === 'custom-model' ? '' : selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value || 'custom-model')}
+              placeholder="Enter AGY model name (e.g. claude-3-5-sonnet, gpt-4o)..."
+              style={{ marginTop: '0.4rem', fontSize: '0.8rem' }}
+            />
+          )}
         </div>
       </div>
 
