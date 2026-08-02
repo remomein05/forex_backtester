@@ -143,6 +143,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             <option value="5m">5 Minutes</option>
             <option value="15m">15 Minutes</option>
             <option value="1h">1 Hour</option>
+            <option value="4h">4 Hours</option>
             <option value="1d">1 Day</option>
           </select>
         </div>
@@ -153,6 +154,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             <option value="5m">5 Minutes</option>
             <option value="15m">15 Minutes</option>
             <option value="1h">1 Hour</option>
+            <option value="4h">4 Hours</option>
             <option value="1d">1 Day</option>
           </select>
         </div>

@@ -308,6 +308,7 @@ async def async_get_ohlcv_data(symbol: str, start_date: datetime.date, end_date:
         "5m": "5min",
         "15m": "15min",
         "1h": "1h",
+        "4h": "4h",
         "1d": "1D"
     }
     
