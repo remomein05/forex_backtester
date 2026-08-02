@@ -48,8 +48,22 @@ export const App: React.FC = () => {
   const [timeframe, setTimeframe] = useState<string>('1h');
   const [higherTimeframe, setHigherTimeframe] = useState<string>('none');
   
-  // Date range clamped to 2026
-  const [startDate, setStartDate] = useState<string>('2026-01-01');
+  // Date range initialized with default current date or persisted localStorage value
+  const [startDate, setStartDateState] = useState<string>(() => {
+    const saved = localStorage.getItem('forex_backtester_start_date');
+    if (saved) return saved;
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  });
+
+  const setStartDate = (date: string) => {
+    setStartDateState(date);
+    localStorage.setItem('forex_backtester_start_date', date);
+  };
+
   const [endDate, setEndDate] = useState<string>('2026-03-31');
   
   const [cash, setCash] = useState<number>(10000);
