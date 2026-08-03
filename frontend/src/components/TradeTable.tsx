@@ -163,7 +163,12 @@ export const TradeTable: React.FC<TradeTableProps> = ({ trades }) => {
                         {trade.duration}
                       </td>
                       <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontWeight: 600, color: pnlColor }}>
-                        {trade.return_pct.toFixed(2)}%
+                        <div>{trade.return_pct >= 0 ? `+${trade.return_pct.toFixed(2)}%` : `${trade.return_pct.toFixed(2)}%`}</div>
+                        {trade.asset_return_pct != null && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400 }}>
+                            ({trade.asset_return_pct >= 0 ? `+${trade.asset_return_pct.toFixed(2)}%` : `${trade.asset_return_pct.toFixed(2)}%`} price)
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontWeight: 700, color: pnlColor }}>
                         {formatCurrency(trade.pnl)}

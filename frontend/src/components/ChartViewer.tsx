@@ -21,6 +21,41 @@ interface ChartViewerProps {
   timeframe: string;
 }
 
+const parseTimestamp = (tStr: string | number | undefined): number => {
+  if (typeof tStr === 'number') return tStr;
+  if (!tStr) return 0;
+  const normalized = String(tStr).trim().replace(' ', 'T');
+  const time = Date.parse(normalized);
+  return isNaN(time) ? 0 : time;
+};
+
+const findClosestCandleIndex = (targetTimeStr: string | undefined, candleMsList: number[]): number => {
+  const targetMs = parseTimestamp(targetTimeStr);
+  if (!targetMs || candleMsList.length === 0) return -1;
+
+  let low = 0;
+  let high = candleMsList.length - 1;
+
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (candleMsList[mid] === targetMs) return mid;
+    if (candleMsList[mid] < targetMs) low = mid + 1;
+    else high = mid - 1;
+  }
+
+  const candidate1 = low - 1;
+  const candidate2 = low;
+
+  if (candidate1 < 0) return 0;
+  if (candidate2 >= candleMsList.length) return candleMsList.length - 1;
+
+  const diff1 = Math.abs(candleMsList[candidate1] - targetMs);
+  const diff2 = Math.abs(candleMsList[candidate2] - targetMs);
+
+  return diff1 <= diff2 ? candidate1 : candidate2;
+};
+
+
 export const ChartViewer: React.FC<ChartViewerProps> = ({
   candles = [],
   trades = [],
@@ -62,14 +97,18 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
     return trades.find(t => t.id === selectedTradeId) || null;
   }, [selectedTradeId, trades]);
 
+  // Pre-calculate candle timestamps in milliseconds for fast, exact matching
+  const candleTimesMs = useMemo(() => {
+    return candles.map(c => parseTimestamp(c.time));
+  }, [candles]);
+
   // Handle trade selection & auto-scroll to centered trade window
   const handleSelectTrade = (tradeId: number | 'all') => {
     setSelectedTradeId(tradeId);
-    if (tradeId !== 'all' && candles.length > 0) {
+    if (tradeId !== 'all' && candles.length > 0 && candleTimesMs.length > 0) {
       const t = trades.find(tr => tr.id === tradeId);
       if (t) {
-        const cleanEntryTime = t.entry_time.replace('T', ' ').slice(0, 13);
-        const entryIdx = candles.findIndex(c => c.time.replace('T', ' ').startsWith(cleanEntryTime));
+        const entryIdx = findClosestCandleIndex(t.entry_time, candleTimesMs);
         if (entryIdx !== -1) {
           const span = 100;
           const start = Math.max(0, entryIdx - 30);
@@ -239,25 +278,30 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
   // Build Price Line points string for line view
   const linePoints = visibleCandles.map((c, i) => `${idxToX(i)},${valToY(c.close)}`).join(' ');
 
-  // Match trades to visible candles
-  const tradesOnVisibleCandles: { trade: Trade; entryIdx?: number; exitIdx?: number }[] = [];
-  trades.forEach(t => {
-    if (selectedTradeId !== 'all' && t.id !== selectedTradeId) return;
+  // Match trades to visible candles using exact timestamp binary search
+  const tradesOnVisibleCandles = useMemo(() => {
+    const list: { trade: Trade; entryIdx?: number; exitIdx?: number }[] = [];
+    if (candleTimesMs.length === 0) return list;
 
-    const cleanEntry = t.entry_time.replace('T', ' ').slice(0, 13);
-    const cleanExit = t.exit_time.replace('T', ' ').slice(0, 13);
+    trades.forEach(t => {
+      if (selectedTradeId !== 'all' && t.id !== selectedTradeId) return;
 
-    const entryIdx = candles.findIndex(c => c.time.replace('T', ' ').startsWith(cleanEntry));
-    const exitIdx = candles.findIndex(c => c.time.replace('T', ' ').startsWith(cleanExit));
+      const rawEntryIdx = findClosestCandleIndex(t.entry_time, candleTimesMs);
+      const rawExitIdx = findClosestCandleIndex(t.exit_time, candleTimesMs);
 
-    if ((entryIdx >= validStart && entryIdx <= validEnd) || (exitIdx >= validStart && exitIdx <= validEnd)) {
-      tradesOnVisibleCandles.push({
-        trade: t,
-        entryIdx: (entryIdx >= validStart && entryIdx <= validEnd) ? entryIdx - validStart : undefined,
-        exitIdx: (exitIdx >= validStart && exitIdx <= validEnd) ? exitIdx - validStart : undefined
-      });
-    }
-  });
+      const isEntryVisible = rawEntryIdx >= validStart && rawEntryIdx <= validEnd;
+      const isExitVisible = rawExitIdx >= validStart && rawExitIdx <= validEnd;
+
+      if (isEntryVisible || isExitVisible) {
+        list.push({
+          trade: t,
+          entryIdx: isEntryVisible ? rawEntryIdx - validStart : undefined,
+          exitIdx: isExitVisible ? rawExitIdx - validStart : undefined
+        });
+      }
+    });
+    return list;
+  }, [trades, candleTimesMs, validStart, validEnd, selectedTradeId]);
 
   // Generate 5 Y-Axis ticks
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map(pct => {
@@ -582,6 +626,30 @@ export const ChartViewer: React.FC<ChartViewerProps> = ({
               points={linePoints}
             />
           )}
+
+          {/* Render Trade Entry-to-Exit Connection Lines */}
+          {tradesOnVisibleCandles.map(({ trade, entryIdx, exitIdx }) => {
+            if (entryIdx === undefined || exitIdx === undefined) return null;
+            const x1 = idxToX(entryIdx);
+            const y1 = valToY(trade.entry_price);
+            const x2 = idxToX(exitIdx);
+            const y2 = valToY(trade.exit_price);
+            const strokeColor = trade.pnl >= 0 ? '#34d399' : '#f43f5e';
+
+            return (
+              <line
+                key={`trade-vector-${trade.id}`}
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke={strokeColor}
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+                opacity={0.65}
+              />
+            );
+          })}
 
           {/* Render Trade Overlays (Long ▲, Short ▼, Exit ●) */}
           {tradesOnVisibleCandles.map(({ trade, entryIdx, exitIdx }) => {

@@ -33,6 +33,7 @@ export interface Trade {
   exit_time: string;
   pnl: number;
   return_pct: number;
+  asset_return_pct?: number | null;
   duration: string;
   sl?: number | null;
   tp?: number | null;

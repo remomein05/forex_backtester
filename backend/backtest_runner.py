@@ -221,7 +221,15 @@ def run_backtest_from_code(code_str: str, df: pd.DataFrame, cash: float = 10000.
             
     # Run backtest
     try:
-        bt = Backtest(df, strategy_cls, cash=cash, commission=commission, trade_on_close=False)
+        bt = Backtest(
+            df,
+            strategy_cls,
+            cash=cash,
+            commission=commission,
+            margin=0.01,
+            exclusive_orders=True,
+            trade_on_close=False
+        )
         stats = bt.run()
     except Exception as e:
         raise RuntimeError(f"Error during backtest execution: {e}")
@@ -249,6 +257,11 @@ def run_backtest_from_code(code_str: str, df: pd.DataFrame, cash: float = 10000.
             sl_val = clean_value(row["SL"]) if "SL" in row and pd.notna(row["SL"]) else None
             tp_val = clean_value(row["TP"]) if "TP" in row and pd.notna(row["TP"]) else None
             
+            pnl_val = clean_value(row["PnL"])
+            # Calculate account equity return % for the trade
+            equity_return_pct = (pnl_val / cash * 100.0) if (cash and pnl_val is not None) else 0.0
+            asset_return_pct = clean_value(row["ReturnPct"] * 100.0) if "ReturnPct" in row else 0.0
+
             trades_list.append({
                 "id": int(idx),
                 "size": clean_value(row["Size"]),
@@ -256,8 +269,9 @@ def run_backtest_from_code(code_str: str, df: pd.DataFrame, cash: float = 10000.
                 "exit_price": clean_value(row["ExitPrice"]),
                 "entry_time": clean_value(row["EntryTime"]),
                 "exit_time": clean_value(row["ExitTime"]),
-                "pnl": clean_value(row["PnL"]),
-                "return_pct": clean_value(row["ReturnPct"] * 100.0), # convert ratio to percentage
+                "pnl": pnl_val,
+                "return_pct": clean_value(equity_return_pct),
+                "asset_return_pct": asset_return_pct,
                 "duration": str(row["Duration"]),
                 "sl": sl_val,
                 "tp": tp_val

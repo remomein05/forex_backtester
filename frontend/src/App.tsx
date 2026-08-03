@@ -43,20 +43,32 @@ export const App: React.FC = () => {
 
   // Config state
   const [pairs, setPairs] = useState<string[]>(['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'XAUUSD']);
-  const [selectedPair, setSelectedPair] = useState<string>('EURUSD');
+  
+  const [selectedPair, setSelectedPairState] = useState<string>(() => {
+    return localStorage.getItem('forex_backtester_selected_pair') || 'EURUSD';
+  });
+  const setSelectedPair = (pair: string) => {
+    setSelectedPairState(pair);
+    localStorage.setItem('forex_backtester_selected_pair', pair);
+  };
+
   const [isCustomPair, setIsCustomPair] = useState<boolean>(false);
-  const [timeframe, setTimeframe] = useState<string>('1h');
+  
+  const [timeframe, setTimeframeState] = useState<string>(() => {
+    return localStorage.getItem('forex_backtester_timeframe') || '1h';
+  });
+  const setTimeframe = (tf: string) => {
+    setTimeframeState(tf);
+    localStorage.setItem('forex_backtester_timeframe', tf);
+  };
+
   const [higherTimeframe, setHigherTimeframe] = useState<string>('none');
   
   // Date range initialized with default current date or persisted localStorage value
   const [startDate, setStartDateState] = useState<string>(() => {
     const saved = localStorage.getItem('forex_backtester_start_date');
     if (saved) return saved;
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+    return '2026-01-20';
   });
 
   const setStartDate = (date: string) => {
@@ -64,7 +76,13 @@ export const App: React.FC = () => {
     localStorage.setItem('forex_backtester_start_date', date);
   };
 
-  const [endDate, setEndDate] = useState<string>('2026-03-31');
+  const [endDate, setEndDateState] = useState<string>(() => {
+    return localStorage.getItem('forex_backtester_end_date') || '2026-08-03';
+  });
+  const setEndDate = (date: string) => {
+    setEndDateState(date);
+    localStorage.setItem('forex_backtester_end_date', date);
+  };
   
   const [cash, setCash] = useState<number>(10000);
   const [commission, setCommission] = useState<number>(0.0002);
@@ -124,7 +142,7 @@ export const App: React.FC = () => {
     dateTo: '',
     elapsedSeconds: 0
   });
-  const [isDataReady, setIsDataReady] = useState<boolean>(false);
+  const [isDataReady, setIsDataReady] = useState<boolean>(true);
   
   const [isFlowchartLoading, setIsFlowchartLoading] = useState<boolean>(false);
   const [isCodeLoading, setIsCodeLoading] = useState<boolean>(false);

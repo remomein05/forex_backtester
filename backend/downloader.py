@@ -60,6 +60,9 @@ def _price_scale(symbol: str) -> int:
         return 1000
     return 100000
 
+get_point_divider = _price_scale
+
+
 # ---------------------------------------------------------------------------
 # Supported pairs  (intersection of our list and ForexSB catalog)
 # ---------------------------------------------------------------------------

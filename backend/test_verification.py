@@ -17,7 +17,7 @@ from llm_manager import generate_flowchart, generate_strategy_code, get_client, 
 
 def test_downloader_and_parser():
     print("Running Downloader/Parser Test...")
-    symbol = "EURUSD"
+    symbol = "TESTPAIR"
     divider = get_point_divider(symbol)
     
     # Generate 10 mock ticks for 2026-06-15 10:00:00 (10:00:00 to 10:00:10)
@@ -25,30 +25,24 @@ def test_downloader_and_parser():
     base_time = datetime.datetime(2026, 6, 15, 10, 0, 0)
     
     for i in range(10):
-        # offset in ms: i seconds
         offset_ms = i * 1000
-        # Ask/bid prices around 1.08000
         ask_raw = int(1.08010 * divider + i)
         bid_raw = int(1.07990 * divider - i)
         ask_vol = 1.5 + i
         bid_vol = 1.2 + i
         ticks.append((offset_ms, ask_raw, bid_raw, ask_vol, bid_vol))
         
-    # Pack into binary bytes
     binary_data = b""
     for tick in ticks:
         binary_data += struct.pack(">IIIff", *tick)
         
-    # Compress with lzma
     compressed_data = lzma.compress(binary_data)
     
-    # Save mock file to cache directory representing 2026-06-15 10:00:00
-    cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", symbol)
+    # Save mock file to cache directory representing M1 parquet cache
+    cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "forexsb", symbol)
     os.makedirs(cache_dir, exist_ok=True)
-    cache_path = os.path.join(cache_dir, "2026_06_15_1m.csv")
+    cache_path = os.path.join(cache_dir, "M1.parquet")
     
-    # We will simulate the cached output directly to test aggregation and resampling
-    # 1-minute candle
     df_mock = pd.DataFrame([
         {
             "timestamp": datetime.datetime(2026, 6, 15, 10, 0, 0),
@@ -60,7 +54,7 @@ def test_downloader_and_parser():
         }
     ])
     df_mock.set_index("timestamp", inplace=True)
-    df_mock.to_csv(cache_path)
+    df_mock.to_parquet(cache_path)
     
     print(f"Mock 1-minute data cached at: {cache_path}")
     
@@ -73,6 +67,16 @@ def test_downloader_and_parser():
     assert not df.empty, "DataFrame should not be empty"
     assert "Open" in df.columns, "Should have Open column"
     assert len(df) == 1, "Should have exactly 1 row"
+
+    # Clean up test cache file
+    try:
+        if os.path.exists(cache_path):
+            os.remove(cache_path)
+        if os.path.exists(cache_dir):
+            os.rmdir(cache_dir)
+    except Exception as e:
+        print(f"Cleanup warning: {e}")
+
     print("Downloader and parser verification: SUCCESS")
 
 def test_backtest_runner():

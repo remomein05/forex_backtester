@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Sparkles, AlertTriangle, Eye, EyeOff, Bookmark, Save, PlusCircle, Check } from 'lucide-react';
+import { Play, Sparkles, AlertTriangle, Eye, EyeOff, Bookmark, Save, PlusCircle, Check, Trash2 } from 'lucide-react';
 import { SavedStrategiesModal } from './SavedStrategiesModal';
-import { getSavedStrategies, saveStrategy } from '../api';
+import { getSavedStrategies, saveStrategy, deleteStrategy } from '../api';
 import type { SavedStrategy } from '../api';
 
 interface StrategyEditorProps {
@@ -122,6 +122,24 @@ export const StrategyEditor: React.FC<StrategyEditorProps> = ({
       await fetchSavedList();
     } catch (err: any) {
       alert(err.message || 'Failed to save strategy.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteCurrent = async () => {
+    if (!selectedStrategyId) return;
+    if (!window.confirm(`Are you sure you want to remove "${selectedStrategyName}"?`)) return;
+    setIsSaving(true);
+    try {
+      await deleteStrategy(selectedStrategyId);
+      setSaveMessage(`Removed "${selectedStrategyName}"`);
+      setTimeout(() => setSaveMessage(null), 3000);
+      setSelectedStrategyId('');
+      setSelectedStrategyName('');
+      await fetchSavedList();
+    } catch (err: any) {
+      alert(err.message || 'Failed to remove strategy.');
     } finally {
       setIsSaving(false);
     }
@@ -259,6 +277,15 @@ export const StrategyEditor: React.FC<StrategyEditorProps> = ({
                 style={{ fontSize: '0.8rem', padding: '0.45rem 0.75rem', background: 'rgba(6, 182, 212, 0.15)', color: 'var(--accent-cyan)', border: '1px solid rgba(6, 182, 212, 0.3)', gap: '0.3rem' }}
               >
                 <PlusCircle size={14} /> Save as New
+              </button>
+              <button
+                onClick={handleDeleteCurrent}
+                disabled={isSaving}
+                className="btn"
+                title="Remove this saved strategy"
+                style={{ fontSize: '0.8rem', padding: '0.45rem 0.75rem', background: 'rgba(239, 68, 68, 0.15)', color: '#fca5a5', border: '1px solid rgba(239, 68, 68, 0.3)', gap: '0.3rem' }}
+              >
+                <Trash2 size={14} /> Delete
               </button>
             </>
           ) : (
