@@ -210,6 +210,31 @@ def run_backtest_from_code(code_str: str, df: pd.DataFrame, cash: float = 10000.
                 
     if not strategy_cls:
         raise ValueError("Could not find a class inheriting from 'backtesting.Strategy' in the generated code.")
+
+    # Enforce safe 2% account equity risk fallback for buy and sell if size is omitted or 1.0 (all-in)
+    orig_buy = strategy_cls.buy
+    orig_sell = strategy_cls.sell
+
+    def safe_buy(self, *, size=None, limit=None, stop=None, sl=None, tp=None):
+        if size is None or size == 1.0 or (isinstance(size, float) and size >= 0.99):
+            price = self.data.Close[-1]
+            sl_price = sl if sl is not None else price * 0.98
+            price_risk = abs(price - sl_price)
+            risk_usd = self.equity * 0.02
+            size = max(1000, int(risk_usd / price_risk)) if price_risk > 0 else 10000
+        return orig_buy(self, size=size, limit=limit, stop=stop, sl=sl, tp=tp)
+
+    def safe_sell(self, *, size=None, limit=None, stop=None, sl=None, tp=None):
+        if size is None or size == 1.0 or (isinstance(size, float) and size >= 0.99):
+            price = self.data.Close[-1]
+            sl_price = sl if sl is not None else price * 1.02
+            price_risk = abs(price - sl_price)
+            risk_usd = self.equity * 0.02
+            size = max(1000, int(risk_usd / price_risk)) if price_risk > 0 else 10000
+        return orig_sell(self, size=size, limit=limit, stop=stop, sl=sl, tp=tp)
+
+    strategy_cls.buy = safe_buy
+    strategy_cls.sell = safe_sell
         
     # Ensure DataFrame is sorted chronologically
     df = df.sort_index()
