@@ -43,10 +43,11 @@ export const TradeTable: React.FC<TradeTableProps> = ({ trades }) => {
 
   const handleExportCSV = () => {
     if (trades.length === 0) return;
-    const headers = ['ID', 'Type', 'Entry Time', 'Entry Price', 'Stop Loss (SL)', 'Take Profit (TP)', 'Exit Time', 'Exit Price', 'Duration', 'Return %', 'PnL ($)'];
+    const headers = ['ID', 'Type', 'Size', 'Entry Time', 'Entry Price', 'Stop Loss (SL)', 'Take Profit (TP)', 'Exit Time', 'Exit Price', 'Duration', 'Return %', 'PnL ($)'];
     const rows = trades.map(t => [
       t.id,
       t.size > 0 ? 'Buy (Long)' : 'Sell (Short)',
+      Math.abs(t.size),
       t.entry_time,
       t.entry_price,
       t.sl != null ? t.sl.toFixed(5) : '-',
@@ -123,11 +124,12 @@ export const TradeTable: React.FC<TradeTableProps> = ({ trades }) => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'hidden' }}>
           {/* Responsive Table wrapper */}
           <div style={{ overflowX: 'auto', width: '100%' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left', minWidth: '850px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left', minWidth: '920px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-glass)', color: 'var(--text-secondary)' }}>
                   <th style={{ padding: '0.75rem 0.5rem' }}>ID</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>Type</th>
+                  <th style={{ padding: '0.75rem 0.5rem' }}>Size</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>Entry Time / Price</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>Stop Loss (SL)</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>Take Profit (TP)</th>
@@ -154,6 +156,9 @@ export const TradeTable: React.FC<TradeTableProps> = ({ trades }) => {
                         <span style={{ background: directionBg, color: directionText, padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>
                           {direction}
                         </span>
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-primary)' }}>
+                        {Math.abs(trade.size).toLocaleString()}
                       </td>
                       <td style={{ padding: '0.75rem 0.5rem' }}>
                         <div>{formatDate(trade.entry_time)}</div>
