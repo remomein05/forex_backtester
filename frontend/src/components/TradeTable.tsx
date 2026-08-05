@@ -43,12 +43,14 @@ export const TradeTable: React.FC<TradeTableProps> = ({ trades }) => {
 
   const handleExportCSV = () => {
     if (trades.length === 0) return;
-    const headers = ['ID', 'Type', 'Entry Time', 'Entry Price', 'Exit Time', 'Exit Price', 'Duration', 'Return %', 'PnL ($)'];
+    const headers = ['ID', 'Type', 'Entry Time', 'Entry Price', 'Stop Loss (SL)', 'Take Profit (TP)', 'Exit Time', 'Exit Price', 'Duration', 'Return %', 'PnL ($)'];
     const rows = trades.map(t => [
       t.id,
       t.size > 0 ? 'Buy (Long)' : 'Sell (Short)',
       t.entry_time,
       t.entry_price,
+      t.sl != null ? t.sl.toFixed(5) : '-',
+      t.tp != null ? t.tp.toFixed(5) : '-',
       t.exit_time,
       t.exit_price,
       `"${t.duration}"`,
@@ -121,12 +123,14 @@ export const TradeTable: React.FC<TradeTableProps> = ({ trades }) => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'hidden' }}>
           {/* Responsive Table wrapper */}
           <div style={{ overflowX: 'auto', width: '100%' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left', minWidth: '700px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left', minWidth: '850px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-glass)', color: 'var(--text-secondary)' }}>
                   <th style={{ padding: '0.75rem 0.5rem' }}>ID</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>Type</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>Entry Time / Price</th>
+                  <th style={{ padding: '0.75rem 0.5rem' }}>Stop Loss (SL)</th>
+                  <th style={{ padding: '0.75rem 0.5rem' }}>Take Profit (TP)</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>Exit Time / Price</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>Duration</th>
                   <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Return %</th>
@@ -154,6 +158,12 @@ export const TradeTable: React.FC<TradeTableProps> = ({ trades }) => {
                       <td style={{ padding: '0.75rem 0.5rem' }}>
                         <div>{formatDate(trade.entry_time)}</div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>@{trade.entry_price.toFixed(5)}</div>
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: trade.sl != null ? '#f43f5e' : 'var(--text-muted)' }}>
+                        {trade.sl != null ? trade.sl.toFixed(5) : '-'}
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: trade.tp != null ? '#10b981' : 'var(--text-muted)' }}>
+                        {trade.tp != null ? trade.tp.toFixed(5) : '-'}
                       </td>
                       <td style={{ padding: '0.75rem 0.5rem' }}>
                         <div>{formatDate(trade.exit_time)}</div>
