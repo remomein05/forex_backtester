@@ -228,7 +228,8 @@ def run_backtest_from_code(code_str: str, df: pd.DataFrame, cash: float = 10000.
             commission=commission,
             margin=0.01,
             exclusive_orders=True,
-            trade_on_close=False
+            trade_on_close=False,
+            finalize_trades=True
         )
         stats = bt.run()
     except Exception as e:
