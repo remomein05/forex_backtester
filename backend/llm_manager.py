@@ -90,18 +90,25 @@ class GeneratedStrategy(Strategy):
 ```
 
 Additional details on backtesting.py API:
-- Buying: `self.buy(sl=stop_loss_price, tp=take_profit_price, size=0.1)` (size is fraction of equity if float < 1.0, e.g. 0.99 for all-in; or exact integer share count).
-- Selling: `self.sell(sl=stop_loss_price, tp=take_profit_price, size=0.1)`.
+- Position Sizing (Units): Pass exact integer units to `size`. E.g., `self.buy(sl=stop_loss_price, tp=take_profit_price, size=units)`.
 - Checking positions: `self.position.is_long` or `self.position.is_short` or `self.position` (evaluates to True if active position exists).
 - Closing positions: `self.position.close()`.
+
+CRITICAL RISK MANAGEMENT & POSITION SIZING RULES:
+1. Never trade 100% full margin all-in. Always calculate dynamic units based on risk percentage (default 2% account equity risk).
+2. Calculate Position Units formula:
+   `risk_usd = self.equity * 0.02`
+   `price_risk = abs(price - sl)`
+   `units = max(1000, int(risk_usd / price_risk)) if price_risk > 0 else 10000`
+3. Risk to Reward (R:R) 1:2 Ratio (2% SL -> 4% to 5% TP):
+   - For Long: `sl = price * (1 - 0.02)`, `tp = price * (1 + 0.04)` (or `tp = price + 2 * (price - sl)`).
+   - For Short: `sl = price * (1 + 0.02)`, `tp = price * (1 - 0.04)` (or `tp = price - 2 * (sl - price)`).
 
 Guidelines:
 1. Return ONLY the python code inside a ```python ``` markdown block. No other text or explanations.
 2. The class MUST be named `GeneratedStrategy`.
 3. Do not import `ta-lib` or any libraries not available in a standard Python environment.
-4. Set stop loss (sl) and take profit (tp) if requested. Always calculate them as absolute prices:
-   - For long: `sl = self.data.Close[-1] * (1 - 0.02)` (e.g. 2% stop).
-   - For short: `sl = self.data.Close[-1] * (1 + 0.02)`.
+4. Set stop loss (sl), take profit (tp), and calculated position units (size) on every trade entry.
 5. Ensure all data accesses are correct. `self.data.Close` is a series; access the current element as `self.data.Close[-1]`.
 6. Built-in functions `SMA`, `EMA`, `RSI`, `ATR`, `STD`, `MACD`, `get_recent_high`, `get_recent_low`, `HIGHEST`, `LOWEST` are automatically available in context. Do not import undefined helper modules.
 

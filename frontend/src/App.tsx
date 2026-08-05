@@ -89,7 +89,7 @@ export const App: React.FC = () => {
 
   // Strategy logic states
   const [strategyDesc, setStrategyDesc] = useState<string>(
-    'SMA crossover strategy. Buy long when the 10-period SMA crosses above the 50-period SMA. Sell short (or close long) when the 10-period SMA crosses below the 50-period SMA. Set a 1% stop loss and a 2% take profit on all entries.'
+    'SMA crossover strategy. Buy long when the 10-period SMA crosses above the 50-period SMA. Sell short (or close long) when the 10-period SMA crosses below the 50-period SMA. Always risk exactly 2% of the account balance per trade (SL set at 2% price distance, TP set at 4% to 5% price distance for a 1:2 risk-to-reward ratio).'
   );
   const [llmProvider, setLlmProvider] = useState<string>('agy_cli');
   const [apiKey, setApiKey] = useState<string>('');
